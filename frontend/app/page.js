@@ -14,6 +14,7 @@ export default function Home() {
                     <button className="button">Wealth Manager</button>
                 </Link>
             </div>
+            {/* Footer has been moved */}
             <p className="footer">Powered by Langchain + Anthropic</p>
             <style jsx>{`
                 .home {
@@ -38,6 +39,7 @@ export default function Home() {
                     flex-direction: column;
                     align-items: center;
                     gap: 20px;
+                    margin-bottom: 20px; /* Added space between buttons and footer */
                 }
 
                 .button {
@@ -59,6 +61,12 @@ export default function Home() {
 
                 .button:active {
                     transform: scale(0.95);
+                }
+
+                .footer {
+                    margin-top: 220px; /* Adds spacing above footer */
+                    font-size: 1rem;
+                    color: #665;
                 }
             `}</style>
         </div>
