@@ -1,0 +1,9 @@
+langchain
+langchain_openai
+langchain_community
+langgraph
+ipykernel
+beautifulsoup4
+langchain_anthropic
+flask
+flask_cors
