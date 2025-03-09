@@ -14,7 +14,7 @@ export default function Home() {
                     <button className="button">Wealth Manager</button>
                 </Link>
                 <Link href="/multiagent">
-                    <button className="button">Multi-Agent</button> {/* New button */}
+                    <button className="button">Team</button> {/* New button */}
                 </Link>
             </div>
             {/* Footer has been moved */}

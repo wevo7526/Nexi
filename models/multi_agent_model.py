@@ -40,7 +40,7 @@ class MultiAgentConsultant:
 
     def get_advice(self, query, thread_id="default"):
         """
-        Combine insights from the primary and secondary agents.
+        Combine insights from the primary and secondary agents and return structured output.
         """
         try:
             # Generate strategy insights (Primary Agent)
@@ -55,10 +55,66 @@ class MultiAgentConsultant:
                 ("human", f"Research needed: {query}")
             ]).content.strip()
 
-            # Combine results
-            return (
-                f"**Strategic Insights (Primary Agent):**\n{primary_response}\n\n"
-                f"**Detailed Research (Secondary Agent):**\n{secondary_response}"
-            )
+            # Structure the output into segments
+            structured_response = {
+                "agent1": {
+                    "keyFindings": self._extract_key_findings(primary_response),
+                    "recommendations": self._extract_recommendations(primary_response)
+                },
+                "agent2": {
+                    "analysis": self._generate_analysis(secondary_response)
+                }
+            }
+
+            return structured_response
         except Exception as e:
-            return f"Error occurred while generating advice: {e}"
+            return {"error": f"Error occurred while generating advice: {str(e)}"}
+
+    def _extract_key_findings(self, response):
+        """
+        Extract key findings from the response.
+        For simplicity, this splits lines starting with `1.`, `2.`, etc.
+        """
+        findings = []
+        for line in response.split('\n'):
+            if line.strip().startswith(("1.", "2.", "3.")):
+                findings.append(line.strip())
+        return findings
+
+    def _extract_recommendations(self, response):
+        """
+        Extract recommendations from the response.
+        Use custom logic or predefined formats (e.g., lines starting with `-`).
+        """
+        recommendations = []
+        for line in response.split('\n'):
+            if line.strip().startswith("- "):  # Recommendations start with a dash
+                recommendations.append(line.strip())
+        return recommendations
+
+    def _generate_analysis(self, response):
+        """
+        Generate graphs, tables, or other supporting analysis dynamically based on response.
+        For simplicity, this function mocks graph and table generation.
+        """
+        if "graph" in response.lower():
+            graph_url = "https://example.com/generated-graph.png"  # Replace with actual graph generation logic
+        else:
+            graph_url = None
+
+        if "table" in response.lower():
+            table_data = {
+                "headers": ["Metric", "Value"],
+                "rows": [
+                    ["Example 1", "Value 1"],
+                    ["Example 2", "Value 2"]
+                ]
+            }
+        else:
+            table_data = None
+
+        return {
+            "graph": graph_url,
+            "table": table_data
+        }
+        

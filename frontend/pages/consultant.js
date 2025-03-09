@@ -42,21 +42,51 @@ function Consultant({ initialData }) {
 
     return (
         <div className="consultant">
-            <ChatHistory chatHistory={chatHistory} onSelectChat={handleSelectChat} />
-            <MainContent
-                query={query}
-                setQuery={setQuery}
-                answer={answer}
-                loading={loading}
-                handleGetAnswer={handleGetAnswer}
-            />
-
+            <header className="header">
+                <h1>Consultant Dashboard</h1>
+            </header>
+            <div className="content">
+                <div className="sidebar">
+                    <ChatHistory chatHistory={chatHistory} onSelectChat={handleSelectChat} />
+                </div>
+                <div className="main-content">
+                    <MainContent
+                        query={query}
+                        setQuery={setQuery}
+                        answer={answer}
+                        loading={loading}
+                        handleGetAnswer={handleGetAnswer}
+                    />
+                </div>
+            </div>
             <style jsx>{`
                 .consultant {
                     display: flex;
+                    flex-direction: column;
                     min-height: 100vh;
-                    background-color: #f7f8fa; /* Light gray background */
+                    background-color: #eef5ff;
                     font-family: "Arial", sans-serif;
+                }
+                .header {
+                    text-align: center;
+                    padding: 20px 0;
+                    background-color: #0070f3;
+                    color: #fff;
+                }
+                .content {
+                    display: flex;
+                    flex: 1;
+                }
+                .sidebar {
+                    width: 20%;
+                    background-color: #f7f8fa;
+                    padding: 20px;
+                    border-right: 1px solid #ddd;
+                    overflow-y: auto;
+                }
+                .main-content {
+                    width: 80%;
+                    padding: 20px;
                 }
             `}</style>
         </div>
