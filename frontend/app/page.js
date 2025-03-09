@@ -13,6 +13,9 @@ export default function Home() {
                 <Link href="/wealthmanager">
                     <button className="button">Wealth Manager</button>
                 </Link>
+                <Link href="/multiagent">
+                    <button className="button">Multi-Agent</button> {/* New button */}
+                </Link>
             </div>
             {/* Footer has been moved */}
             <p className="footer">Powered by Langchain + Anthropic</p>
