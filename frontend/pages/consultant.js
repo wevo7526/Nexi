@@ -9,17 +9,23 @@ function Consultant({ initialData }) {
     const [answer, setAnswer] = useState("");
     const [chatHistory, setChatHistory] = useState(initialData.chatHistory || []);
     const [loading, setLoading] = useState(false); // Track loading state
+    const [file, setFile] = useState(null); // Track selected file
 
     const handleGetAnswer = async () => {
         setLoading(true); // Show loading spinner
+        const formData = new FormData();
+        formData.append("query", query);
+        formData.append("chat_history", JSON.stringify(chatHistory));
+        formData.append("thread_id", "default");
+        if (file) {
+            formData.append("file", file);
+        }
+
         try {
-            const response = await axios.post("http://127.0.0.1:5000/get_answer", {
-                query: query,
-                chat_history: chatHistory.map(chat => ({
-                    role: "user",
-                    content: chat.query
-                })),
-                thread_id: "default",
+            const response = await axios.post("http://127.0.0.1:5000/get_answer", formData, {
+                headers: {
+                    "Content-Type": "multipart/form-data"
+                }
             });
             const newAnswer = {
                 role: "assistant",
@@ -40,6 +46,12 @@ function Consultant({ initialData }) {
         setAnswer(selectedChat.answer);
     };
 
+    const handleFileChange = (event) => {
+        const selectedFile = event.target.files[0];
+        console.log("Selected file:", selectedFile); // Debugging line
+        setFile(selectedFile);
+    };
+
     return (
         <div className="consultant">
             <header className="header">
@@ -57,6 +69,10 @@ function Consultant({ initialData }) {
                         loading={loading}
                         handleGetAnswer={handleGetAnswer}
                     />
+                    <div className="file-upload">
+                        <input type="file" accept=".docx,.pdf,.xls,.xlsx,.ppt,.pptx" onChange={handleFileChange} />
+                        <button onClick={handleGetAnswer}>Upload Document and Get Answer</button>
+                    </div>
                 </div>
             </div>
             <style jsx>{`
@@ -87,6 +103,12 @@ function Consultant({ initialData }) {
                 .main-content {
                     width: 80%;
                     padding: 20px;
+                }
+                .file-upload {
+                    margin-top: 20px;
+                }
+                .file-upload input {
+                    margin-right: 10px;
                 }
             `}</style>
         </div>
