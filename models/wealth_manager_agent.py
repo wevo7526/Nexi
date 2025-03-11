@@ -1,15 +1,18 @@
 import time
+import os
+import pandas as pd
 from langchain_anthropic import ChatAnthropic
 from data.data_loader import load_data
-from config.settings import API_KEY, SERPAPI_API_KEY  # Import the loaded SERP_API_KEY
-import requests
+from config.settings import API_KEY
+from langchain_community.document_loaders import (
+    UnstructuredWordDocumentLoader,
+    UnstructuredExcelLoader,
+    UnstructuredPDFLoader,
+    UnstructuredPowerPointLoader
+)
 
 class WealthManagerAgent:
     def __init__(self):
-        # Ensure the SERP API Key is explicitly passed to the wrapper
-        if not SERPAPI_API_KEY:
-            raise ValueError("SERPAPI_API_KEY is not set. Please check your .env file.")
-
         # Initialize the ChatAnthropic model
         self.llm = ChatAnthropic(
             model="claude-3-5-sonnet-20240620",
@@ -25,73 +28,77 @@ class WealthManagerAgent:
         self.system_prompt = (
             "You are a wealth manager seeking to provide financial advice and strategies for any given financial question. "
             "You are an AI Wealth Manager designed to assist clients in achieving their financial goals. Your responsibilities include assessing clients' financial situations, creating and updating comprehensive financial plans, and providing strategic investment advice. You should develop personalized investment strategies, manage diversified portfolios, and make adjustments as needed to align with clients' objectives. Additionally, you must implement tax optimization strategies, coordinate with tax professionals for compliance, and assist with retirement planning by designing savings plans and advising on income distribution. Collaborate in estate and legacy planning by suggesting efficient wealth transfer strategies and helping clients create wills or trusts. Evaluate financial risks and recommend suitable insurance solutions while offering strategies for debt management. Provide educational planning support, guiding clients on saving for future educational expenses. Educate clients about financial concepts and market trends, and regularly monitor and report on their financial progress. Continuously adjust plans to align with evolving needs, adhering to legal, regulatory, and ethical standards at all times. "
-            "Use tools like SERP API to gather data as needed. Respond concisely and directly to the user's query.\n\n{context}"
+            "Use the provided financial data to gather insights as needed. Respond concisely and directly to the user's query.\n\n{context}"
         )
 
-    def query_serp_api(self, query):
+    def preprocess_input(self, user_input):
         """
-        Use SERP API to get more detailed and accurate data.
+        Method to preprocess user input data of all kinds.
         """
-        try:
-            url = "https://serpapi.com/search"
-            params = {
-                "q": query,
-                "api_key": SERPAPI_API_KEY,
-                "engine": "google"
-            }
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
+        if isinstance(user_input, str):
+            return user_input
+        elif isinstance(user_input, dict):
+            return " ".join(f"{key}: {value}" for key, value in user_input.items())
+        elif isinstance(user_input, list):
+            return " ".join(str(item) for item in user_input)
+        else:
+            return str(user_input)
 
-            # Parse the relevant information from the SERP API response
-            if "organic_results" in data:
-                results = data["organic_results"]
-                if results:
-                    top_result = results[0]
-                    title = top_result.get("title", "No title")
-                    snippet = top_result.get("snippet", "No snippet")
-                    link = top_result.get("link", "No link")
-                    return f"Title: {title}\nSnippet: {snippet}\nLink: {link}"
-                else:
-                    return "No relevant data found in SERP API response."
-            else:
-                return "No relevant data found in SERP API response."
-        except requests.exceptions.RequestException as e:
-            print(f"SERP API Request Error: {e}")
-            return "No data retrieved from SERP API due to a request error."
-        except Exception as e:
-            print(f"SERP API Error: {e}")
-            return "No data retrieved from SERP API due to an error."
-
-    def get_answer(self, query, chat_history=None, thread_id="default"):
+    def load_document(self, file_path):
         """
-        Answer user queries, combining data from SERP API.
+        Method to load a document based on its file type.
+        """
+        file_extension = os.path.splitext(file_path)[1].lower()
+        if file_extension == '.docx':
+            loader = UnstructuredWordDocumentLoader(file_path, mode="elements")
+        elif file_extension == '.pdf':
+            loader = UnstructuredPDFLoader(file_path, mode="elements")
+        elif file_extension in ['.xls', '.xlsx']:
+            loader = UnstructuredExcelLoader(file_path, mode="elements")
+        elif file_extension in ['.ppt', '.pptx']:
+            loader = UnstructuredPowerPointLoader(file_path, mode="elements")
+        else:
+            raise ValueError(f"Unsupported file type: {file_extension}")
+        
+        self.docs = loader.load()
+        return self.docs
+
+    def get_advice(self, query, thread_id="default"):
+        """
+        Method to get advice based on the user's query.
         """
         try:
-            # Prepare the conversation messages
-            messages = [("system", self.system_prompt)]
-            if chat_history:
-                messages.extend(chat_history)
-
-            # Use SERP API for financial queries
-            tool_response = ""
-            if "stock" in query.lower() or "price" in query.lower() or "market" in query.lower():
-                serp_api_result = self.query_serp_api(query)
-                tool_response = f"SERP API: {serp_api_result}"
-                messages.append(("assistant", tool_response))
-
-            # Add the human query to the messages
-            messages.append(("human", query))
-
-            # Invoke ChatAnthropic for response generation
+            query = self.preprocess_input(query)
+            context = "\n".join([doc.page_content for doc in self.docs])
+            messages = [
+                ("system", self.system_prompt.format(context=context)),
+                ("human", query)
+            ]
             response = self.llm.invoke(messages)
-
-            # Combine tool results and Anthropic's response
-            full_response = (
-                f"{tool_response}\n{response.content.strip()}" if tool_response else response.content.strip()
-            )
-            return full_response
+            return response.content.strip()  # AIMessage ensures content is a string
         except Exception as e:
             print(f"Error encountered: {e}. Retrying in 60 seconds...")
             time.sleep(60)
-            return self.get_answer(query, chat_history, thread_id)
+            return self.get_advice(query, thread_id)
+
+    def get_answer(self, query, chat_history=None, thread_id="default", context=""):
+        """
+        Method to answer user queries, including chat history if provided.
+        """
+        try:
+            query = self.preprocess_input(query)
+            messages = [("system", self.system_prompt.format(context=context))]
+            # Include chat history if available
+            if chat_history:
+                messages.extend(chat_history)
+            messages.append(("human", query))
+
+            # Config placeholder for thread ID (optional in this context)
+            config = {"configurable": {"thread_id": thread_id}}
+
+            response = self.llm.invoke(messages)
+            return response.content.strip()  # Ensures clean string output
+        except Exception as e:
+            print(f"Error encountered: {e}. Retrying in 60 seconds...")
+            time.sleep(60)
+            return self.get_answer(query, chat_history, thread_id, context)

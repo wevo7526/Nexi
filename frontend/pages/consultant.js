@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import axios from "axios";
 import ChatHistory from "../components/ChatHistory";
-import MainContent from "../components/MainContent";
 
 function Consultant({ initialData }) {
     const [query, setQuery] = useState("");

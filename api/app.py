@@ -52,11 +52,24 @@ def get_wealth_answer():
     """
     Endpoint for WealthManagerAgent.
     """
-    data = request.json
+    data = request.form
     query = data.get('query')
     chat_history = data.get('chat_history')
     thread_id = data.get('thread_id', 'default')
-    answer = wealth_manager_agent.get_answer(query, chat_history, thread_id)
+
+    # Handle file upload if present
+    if 'file' in request.files:
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(file_path)
+        docs = wealth_manager_agent.load_document(file_path)
+        context = "\n".join([doc.page_content for doc in docs])
+    else:
+        context = ""
+
+    answer = wealth_manager_agent.get_answer(query, chat_history, thread_id, context)
     return jsonify({'answer': answer})
 
 @app.route('/get_multi_agent_answer', methods=['POST'])
