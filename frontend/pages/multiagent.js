@@ -82,37 +82,12 @@ function MultiAgentConsultant({ initialData }) {
                         <h2>Detailed Research (Agent 2)</h2>
                         <div className="section-content">
                             <h3>Supporting Analysis:</h3>
-                            {agent2.analysis?.graph ? (
-                                <div className="graph-container">
-                                    <h4>Graph:</h4>
-                                    <img src={agent2.analysis.graph} alt="Graph Analysis" />
-                                </div>
-                            ) : (
-                                <p>No graph available for this query.</p>
-                            )}
-                            {agent2.analysis?.table ? (
-                                <div className="table-container">
-                                    <h4>Table:</h4>
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                {agent2.analysis.table.headers.map((header, index) => (
-                                                    <th key={index}>{header}</th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {agent2.analysis.table.rows.map((row, rowIndex) => (
-                                                <tr key={rowIndex}>
-                                                    {row.map((cell, cellIndex) => (
-                                                        <td key={cellIndex}>{cell}</td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : null}
+                            <ul>
+                                {agent2.detailedAnalysis &&
+                                    agent2.detailedAnalysis.map((analysis, index) => (
+                                        <li key={index}>{analysis}</li>
+                                    ))}
+                            </ul>
                         </div>
                     </div>
                 )}
@@ -146,23 +121,6 @@ function MultiAgentConsultant({ initialData }) {
                         list-style: disc;
                         padding-left: 20px;
                     }
-                    .graph-container {
-                        margin-top: 10px;
-                    }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-top: 10px;
-                    }
-                    table th,
-                    table td {
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                    }
-                    table th {
-                        background-color: #f4f4f4;
-                        font-weight: bold;
-                    }
                 `}</style>
             </div>
         );
@@ -170,9 +128,6 @@ function MultiAgentConsultant({ initialData }) {
 
     return (
         <div className="multi-agent-consultant">
-            <header className="header">
-                <h1>Multi-Agent Consultant</h1>
-            </header>
             <div className="content">
                 <div className="sidebar">
                     <ChatHistory
@@ -196,29 +151,52 @@ function MultiAgentConsultant({ initialData }) {
                     display: flex;
                     flex-direction: column;
                     min-height: 100vh;
-                    background-color: #eef5ff;
+                    background-color: #f0f2f5;
                     font-family: "Arial", sans-serif;
-                }
-                .header {
-                    text-align: center;
-                    padding: 20px 0;
-                    background-color: #0070f3;
-                    color: #fff;
                 }
                 .content {
                     display: flex;
                     flex: 1;
+                    padding: 20px;
                 }
                 .sidebar {
-                    width: 20%;
-                    background-color: #f7f8fa;
+                    width: 25%;
+                    background-color: #ffffff;
                     padding: 20px;
                     border-right: 1px solid #ddd;
                     overflow-y: auto;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
                 }
                 .main-content {
-                    width: 80%;
+                    width: 75%;
                     padding: 20px;
+                    background-color: #ffffff;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                }
+                .structured-output {
+                    margin-top: 20px;
+                }
+                .agent-section {
+                    margin-bottom: 20px;
+                }
+                .section-content {
+                    background: #f9f9f9;
+                    padding: 15px;
+                    border-radius: 8px;
+                }
+                h2 {
+                    color: #333;
+                    border-bottom: 2px solid #ddd;
+                    padding-bottom: 5px;
+                }
+                h3 {
+                    margin-top: 10px;
+                    color: #555;
+                }
+                ul {
+                    list-style: disc;
+                    padding-left: 20px;
                 }
             `}</style>
         </div>

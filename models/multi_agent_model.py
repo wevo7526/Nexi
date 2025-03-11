@@ -2,6 +2,7 @@ from langchain.agents import Tool
 from langchain_community.utilities import SerpAPIWrapper
 from langchain_anthropic import ChatAnthropic
 from config.settings import API_KEY
+import logging
 
 class MultiAgentConsultant:
     def __init__(self):
@@ -22,10 +23,12 @@ class MultiAgentConsultant:
         # Define the system prompts
         self.primary_prompt = (
             "You are the primary management consultant, focusing on strategic insights "
-            "for complex business problems. Provide high-level, actionable strategies."
+            "for complex business problems. Provide high-level, actionable strategies. "
+            "Consider the following aspects: market trends, competitive analysis, and risk management."
         )
         self.secondary_prompt = (
-            "You are the secondary consultant specializing in detailed research. Use tools and available data to deliver in-depth analysis."
+            "You are the secondary consultant specializing in detailed research. Use tools and available data to deliver in-depth analysis. "
+            "Consider the following aspects: data accuracy, source credibility, and detailed breakdowns."
         )
 
         # Define tools (e.g., SERP API for external search)
@@ -62,12 +65,13 @@ class MultiAgentConsultant:
                     "recommendations": self._extract_recommendations(primary_response)
                 },
                 "agent2": {
-                    "analysis": self._generate_analysis(secondary_response)
+                    "detailedAnalysis": self._extract_detailed_analysis(secondary_response)
                 }
             }
 
             return structured_response
         except Exception as e:
+            logging.error(f"Error occurred while generating advice: {str(e)}")
             return {"error": f"Error occurred while generating advice: {str(e)}"}
 
     def _extract_key_findings(self, response):
@@ -92,29 +96,13 @@ class MultiAgentConsultant:
                 recommendations.append(line.strip())
         return recommendations
 
-    def _generate_analysis(self, response):
+    def _extract_detailed_analysis(self, response):
         """
-        Generate graphs, tables, or other supporting analysis dynamically based on response.
-        For simplicity, this function mocks graph and table generation.
+        Extract detailed analysis from the response.
+        For simplicity, this splits lines starting with `*`, `-`, etc.
         """
-        if "graph" in response.lower():
-            graph_url = "https://example.com/generated-graph.png"  # Replace with actual graph generation logic
-        else:
-            graph_url = None
-
-        if "table" in response.lower():
-            table_data = {
-                "headers": ["Metric", "Value"],
-                "rows": [
-                    ["Example 1", "Value 1"],
-                    ["Example 2", "Value 2"]
-                ]
-            }
-        else:
-            table_data = None
-
-        return {
-            "graph": graph_url,
-            "table": table_data
-        }
-        
+        analysis = []
+        for line in response.split('\n'):
+            if line.strip().startswith(("*", "-")):
+                analysis.append(line.strip())
+        return analysis
