@@ -10,9 +10,11 @@ function Consultant({ initialData }) {
     const [chatHistory, setChatHistory] = useState(initialData.chatHistory || []);
     const [loading, setLoading] = useState(false); // Track loading state
     const [file, setFile] = useState(null); // Track selected file
+    const [error, setError] = useState(null); // Track errors
 
     const handleGetAnswer = async () => {
         setLoading(true); // Show loading spinner
+        setError(null); // Reset error state
         const formData = new FormData();
         formData.append("query", query);
         formData.append("chat_history", JSON.stringify(chatHistory));
@@ -35,6 +37,7 @@ function Consultant({ initialData }) {
             setChatHistory([...chatHistory, { query, answer: newAnswer.content }]);
         } catch (error) {
             console.error("Error getting answer:", error);
+            setError("Failed to get an answer. Please try again.");
         } finally {
             setLoading(false); // Hide loading spinner
         }
@@ -54,24 +57,30 @@ function Consultant({ initialData }) {
 
     return (
         <div className="consultant">
-            <header className="header">
-                <h1>Consultant Dashboard</h1>
-            </header>
             <div className="content">
                 <div className="sidebar">
                     <ChatHistory chatHistory={chatHistory} onSelectChat={handleSelectChat} />
                 </div>
                 <div className="main-content">
-                    <MainContent
-                        query={query}
-                        setQuery={setQuery}
-                        answer={answer}
-                        loading={loading}
-                        handleGetAnswer={handleGetAnswer}
-                    />
-                    <div className="file-upload">
-                        <input type="file" accept=".docx,.pdf,.xls,.xlsx,.ppt,.pptx" onChange={handleFileChange} />
-                        <button onClick={handleGetAnswer}>Upload Document and Get Answer</button>
+                    <div className="query-section">
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Enter your query..."
+                            className="query-input"
+                        />
+                        <input
+                            type="file"
+                            accept=".docx,.pdf,.xls,.xlsx,.ppt,.pptx"
+                            onChange={handleFileChange}
+                            className="file-input"
+                        />
+                        <button onClick={handleGetAnswer} className="submit-button">Submit</button>
+                    </div>
+                    <div className="response-section">
+                        {loading ? <p>Loading...</p> : <p>{answer}</p>}
+                        {error && <p className="error-message">{error}</p>}
                     </div>
                 </div>
             </div>
@@ -80,14 +89,8 @@ function Consultant({ initialData }) {
                     display: flex;
                     flex-direction: column;
                     min-height: 100vh;
-                    background-color: #eef5ff;
-                    font-family: "Arial", sans-serif;
-                }
-                .header {
-                    text-align: center;
-                    padding: 20px 0;
-                    background-color: #0070f3;
-                    color: #fff;
+                    background-color: var(--background);
+                    font-family: "Geist", sans-serif;
                 }
                 .content {
                     display: flex;
@@ -104,11 +107,44 @@ function Consultant({ initialData }) {
                     width: 80%;
                     padding: 20px;
                 }
-                .file-upload {
-                    margin-top: 20px;
+                .query-section {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 20px;
                 }
-                .file-upload input {
+                .query-input {
+                    flex: 1;
+                    padding: 10px;
+                    font-size: 16px;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
                     margin-right: 10px;
+                }
+                .file-input {
+                    margin-right: 10px;
+                }
+                .submit-button {
+                    padding: 10px 20px;
+                    font-size: 16px;
+                    background-color: #0070f3;
+                    color: #fff;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+                .submit-button:hover {
+                    background-color: #005bb5;
+                }
+                .response-section {
+                    padding: 20px;
+                    background-color: #fff;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    min-height: 300px;
+                }
+                .error-message {
+                    color: red;
+                    margin-top: 10px;
                 }
             `}</style>
         </div>
