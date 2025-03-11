@@ -2,21 +2,20 @@
 import React, { useState } from "react";
 import axios from "axios";
 import ChatHistory from "../components/ChatHistory";
-import MainContent from "../components/MainContent";
 
 function MultiAgentConsultant({ initialData }) {
     const [query, setQuery] = useState("");
     const [structuredResponse, setStructuredResponse] = useState(null); // For structured output
     const [chatHistory, setChatHistory] = useState(initialData.chatHistory || []);
     const [loading, setLoading] = useState(false); // Track loading state
-    const [answer, setAnswer] = useState(""); // Track the answer state
+    const [currentChat, setCurrentChat] = useState([]); // Track the current chat session
 
     const handleGetAnswer = async () => {
         setLoading(true); // Show loading spinner
         try {
             const response = await axios.post("http://127.0.0.1:5000/get_multi_agent_answer", {
                 query: query,
-                chat_history: chatHistory.map((chat) => ({
+                chat_history: currentChat.map((chat) => ({
                     role: "user",
                     content: chat.query,
                 })),
@@ -27,12 +26,12 @@ function MultiAgentConsultant({ initialData }) {
             if (typeof data === "object") {
                 // Validate if structured response is an object
                 setStructuredResponse(data);
-                setAnswer(""); // Clear plain answer state
             } else {
-                setAnswer(data); // Handle fallback to plain answer if needed
                 setStructuredResponse(null); // Clear structured response
             }
-            setChatHistory([...chatHistory, { query, answer: data }]);
+            const newChatEntry = { query, answer: data };
+            setCurrentChat([...currentChat, newChatEntry]);
+            setChatHistory([...chatHistory, newChatEntry]);
         } catch (error) {
             console.error("Error getting answer:", error);
         } finally {
@@ -44,6 +43,13 @@ function MultiAgentConsultant({ initialData }) {
         const selectedChat = chatHistory[index];
         setQuery(selectedChat.query);
         setStructuredResponse(selectedChat.answer); // Assumes structured data
+        setCurrentChat(chatHistory.slice(0, index + 1)); // Set current chat to selected chat history
+    };
+
+    const handleNewChat = () => {
+        setQuery("");
+        setStructuredResponse(null);
+        setCurrentChat([]);
     };
 
     const renderStructuredOutput = () => {
@@ -96,7 +102,6 @@ function MultiAgentConsultant({ initialData }) {
                     .structured-output {
                         margin: 20px 0;
                         padding: 20px;
-                        background: #ffffff;
                         border-radius: 10px;
                         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
                     }
@@ -104,13 +109,11 @@ function MultiAgentConsultant({ initialData }) {
                         margin-bottom: 20px;
                     }
                     .section-content {
-                        background: #f9f9f9;
                         padding: 15px;
                         border-radius: 8px;
                     }
                     h2 {
                         color: #333;
-                        border-bottom: 2px solid #ddd;
                         padding-bottom: 5px;
                     }
                     h3 {
@@ -133,16 +136,21 @@ function MultiAgentConsultant({ initialData }) {
                     <ChatHistory
                         chatHistory={chatHistory}
                         onSelectChat={handleSelectChat}
+                        onNewChat={handleNewChat}
                     />
                 </div>
                 <div className="main-content">
-                    <MainContent
-                        query={query}
-                        setQuery={setQuery}
-                        answer={answer}
-                        loading={loading}
-                        handleGetAnswer={handleGetAnswer}
-                    />
+                    <div className="query-section">
+                        <textarea
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Enter your query here..."
+                            rows="4"
+                        />
+                        <button onClick={handleGetAnswer} disabled={loading}>
+                            {loading ? "Loading..." : "Get Answer"}
+                        </button>
+                    </div>
                     {renderStructuredOutput()}
                 </div>
             </div>
@@ -151,7 +159,6 @@ function MultiAgentConsultant({ initialData }) {
                     display: flex;
                     flex-direction: column;
                     min-height: 100vh;
-                    background-color: #f0f2f5;
                     font-family: "Arial", sans-serif;
                 }
                 .content {
@@ -161,18 +168,38 @@ function MultiAgentConsultant({ initialData }) {
                 }
                 .sidebar {
                     width: 25%;
-                    background-color: #ffffff;
                     padding: 20px;
-                    border-right: 1px solid #ddd;
                     overflow-y: auto;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
                 }
                 .main-content {
                     width: 75%;
                     padding: 20px;
-                    background-color: #ffffff;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                }
+                .query-section {
+                    display: flex;
+                    flex-direction: column;
+                    margin-bottom: 20px;
+                }
+                textarea {
+                    width: 100%;
+                    padding: 10px;
+                    border: 1px solid #ddd;
+                    border-radius: 5px;
+                    margin-bottom: 10px;
+                    font-size: 16px;
+                }
+                button {
+                    padding: 10px 20px;
+                    border: none;
+                    border-radius: 5px;
+                    background-color: #0070f3;
+                    color: white;
+                    font-size: 16px;
+                    cursor: pointer;
+                }
+                button:disabled {
+                    background-color: #ccc;
+                    cursor: not-allowed;
                 }
                 .structured-output {
                     margin-top: 20px;
@@ -181,13 +208,11 @@ function MultiAgentConsultant({ initialData }) {
                     margin-bottom: 20px;
                 }
                 .section-content {
-                    background: #f9f9f9;
                     padding: 15px;
                     border-radius: 8px;
                 }
                 h2 {
                     color: #333;
-                    border-bottom: 2px solid #ddd;
                     padding-bottom: 5px;
                 }
                 h3 {
