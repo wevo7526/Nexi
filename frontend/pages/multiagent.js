@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Import the Sidebar component
+import { CircularProgress, Box, Typography } from "@mui/material";
 
 function MultiAgentConsultant({ initialData }) {
     const [query, setQuery] = useState("");
@@ -9,7 +10,7 @@ function MultiAgentConsultant({ initialData }) {
     const [loading, setLoading] = useState(false); // Track loading state
     const [currentChat, setCurrentChat] = useState([]); // Track the current chat session
 
-    const handleGetAnswer = async () => {
+    const handleAskTeam = async () => {
         setLoading(true); // Show loading spinner
         try {
             const response = await axios.post("http://127.0.0.1:5000/get_multi_agent_answer", {
@@ -23,10 +24,9 @@ function MultiAgentConsultant({ initialData }) {
 
             const data = response.data.answer; // Backend response is structured
             if (typeof data === "object") {
-                // Validate if structured response is an object
-                setStructuredResponse(data);
+                setStructuredResponse(data); // Store structured response
             } else {
-                setStructuredResponse(null); // Clear structured response
+                setStructuredResponse(null); // Clear structured response if not valid
             }
             const newChatEntry = { query, answer: data };
             setCurrentChat([...currentChat, newChatEntry]);
@@ -37,17 +37,6 @@ function MultiAgentConsultant({ initialData }) {
         }
     };
 
-    const handleFileChange = (event) => {
-        const selectedFile = event.target.files[0];
-        console.log("Selected file:", selectedFile); // Debugging line
-    };
-
-    const handleNewChat = () => {
-        setQuery("");
-        setStructuredResponse(null);
-        setCurrentChat([]);
-    };
-
     const renderStructuredOutput = () => {
         if (!structuredResponse || typeof structuredResponse !== "object") return null;
 
@@ -55,72 +44,58 @@ function MultiAgentConsultant({ initialData }) {
 
         return (
             <div className="structured-output">
-                {/* Agent 1 Section */}
-                {agent1 && (
-                    <div className="agent-section">
-                        <h2>Strategic Insights (Agent 1)</h2>
-                        <div className="section-content">
-                            <h3>Key Findings:</h3>
+                <Box sx={{ display: "flex", border: "1px solid #ddd", borderRadius: "8px", overflow: "hidden" }}>
+                    {/* Agent 1 Section */}
+                    {agent1 && (
+                        <Box sx={{ flex: 1, padding: "20px", borderRight: "1px solid #ddd" }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold", color: "#333" }}>
+                                Strategic Insights (Agent 1)
+                            </Typography>
+                            <Typography variant="subtitle1" sx={{ fontWeight: "bold", mb: 1 }}>
+                                Key Findings:
+                            </Typography>
                             <ul>
                                 {agent1.keyFindings &&
                                     agent1.keyFindings.map((finding, index) => (
-                                        <li key={index}>{finding}</li>
+                                        <li key={index}>
+                                            <Typography variant="body2">{finding}</Typography>
+                                        </li>
                                     ))}
                             </ul>
-                            <h3>Strategic Recommendations:</h3>
+                            <Typography variant="subtitle1" sx={{ fontWeight: "bold", mt: 2, mb: 1 }}>
+                                Strategic Recommendations:
+                            </Typography>
                             <ul>
                                 {agent1.recommendations &&
                                     agent1.recommendations.map((rec, index) => (
-                                        <li key={index}>{rec}</li>
+                                        <li key={index}>
+                                            <Typography variant="body2">{rec}</Typography>
+                                        </li>
                                     ))}
                             </ul>
-                        </div>
-                    </div>
-                )}
+                        </Box>
+                    )}
 
-                {/* Agent 2 Section */}
-                {agent2 && (
-                    <div className="agent-section">
-                        <h2>Detailed Research (Agent 2)</h2>
-                        <div className="section-content">
-                            <h3>Supporting Analysis:</h3>
+                    {/* Agent 2 Section */}
+                    {agent2 && (
+                        <Box sx={{ flex: 1, padding: "20px" }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold", color: "#333" }}>
+                                Detailed Research (Agent 2)
+                            </Typography>
+                            <Typography variant="subtitle1" sx={{ fontWeight: "bold", mb: 1 }}>
+                                Supporting Analysis:
+                            </Typography>
                             <ul>
                                 {agent2.detailedAnalysis &&
                                     agent2.detailedAnalysis.map((analysis, index) => (
-                                        <li key={index}>{analysis}</li>
+                                        <li key={index}>
+                                            <Typography variant="body2">{analysis}</Typography>
+                                        </li>
                                     ))}
                             </ul>
-                        </div>
-                    </div>
-                )}
-
-                <style jsx>{`
-                    .structured-output {
-                        margin: 20px 0;
-                        padding: 20px;
-                        border-radius: 10px;
-                        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-                    }
-                    .agent-section {
-                        margin-bottom: 20px;
-                    }
-                    .section-content {
-                        padding: 15px;
-                        border-radius: 8px;
-                    }
-                    h2 {
-                        color: #333;
-                        padding-bottom: 5px;
-                    }
-                    h3 {
-                        margin-top: 10px;
-                        color: #555;
-                    }
-                    ul {
-                        list-style: disc;
-                        padding-left: 20px;
-                    }
-                `}</style>
+                        </Box>
+                    )}
+                </Box>
             </div>
         );
     };
@@ -137,12 +112,13 @@ function MultiAgentConsultant({ initialData }) {
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Enter your query here..."
                             rows="4"
+                            className="query-input"
                         />
-                        <button onClick={handleGetAnswer} disabled={loading}>
-                            {loading ? "Loading..." : "Get Answer"}
+                        <button onClick={handleAskTeam} disabled={loading} className="ask-team-button">
+                            {loading ? <CircularProgress size={20} color="inherit" /> : "Ask Team"}
                         </button>
                     </div>
-                    {renderStructuredOutput()}
+                    {structuredResponse && renderStructuredOutput()}
                 </div>
             </div>
             <style jsx>{`
@@ -166,7 +142,7 @@ function MultiAgentConsultant({ initialData }) {
                     flex-direction: column;
                     margin-bottom: 20px;
                 }
-                textarea {
+                .query-input {
                     width: 100%;
                     padding: 10px;
                     border: 1px solid #ddd;
@@ -174,7 +150,7 @@ function MultiAgentConsultant({ initialData }) {
                     margin-bottom: 10px;
                     font-size: 16px;
                 }
-                button {
+                .ask-team-button {
                     padding: 10px 20px;
                     border: none;
                     border-radius: 5px;
@@ -182,32 +158,19 @@ function MultiAgentConsultant({ initialData }) {
                     color: white;
                     font-size: 16px;
                     cursor: pointer;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
                 }
-                button:disabled {
+                .ask-team-button:hover {
+                    background-color: #005bb5;
+                }
+                .ask-team-button:disabled {
                     background-color: #ccc;
                     cursor: not-allowed;
                 }
                 .structured-output {
                     margin-top: 20px;
-                }
-                .agent-section {
-                    margin-bottom: 20px;
-                }
-                .section-content {
-                    padding: 15px;
-                    border-radius: 8px;
-                }
-                h2 {
-                    color: #333;
-                    padding-bottom: 5px;
-                }
-                h3 {
-                    margin-top: 10px;
-                    color: #555;
-                }
-                ul {
-                    list-style: disc;
-                    padding-left: 20px;
                 }
             `}</style>
         </div>
