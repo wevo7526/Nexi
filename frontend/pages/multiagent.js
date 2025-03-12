@@ -1,12 +1,11 @@
 "use client";
 import React, { useState } from "react";
 import axios from "axios";
-import ChatHistory from "../components/ChatHistory";
+import Sidebar from "../components/Sidebar"; // Import the Sidebar component
 
 function MultiAgentConsultant({ initialData }) {
     const [query, setQuery] = useState("");
     const [structuredResponse, setStructuredResponse] = useState(null); // For structured output
-    const [chatHistory, setChatHistory] = useState(initialData.chatHistory || []);
     const [loading, setLoading] = useState(false); // Track loading state
     const [currentChat, setCurrentChat] = useState([]); // Track the current chat session
 
@@ -31,7 +30,6 @@ function MultiAgentConsultant({ initialData }) {
             }
             const newChatEntry = { query, answer: data };
             setCurrentChat([...currentChat, newChatEntry]);
-            setChatHistory([...chatHistory, newChatEntry]);
         } catch (error) {
             console.error("Error getting answer:", error);
         } finally {
@@ -39,11 +37,9 @@ function MultiAgentConsultant({ initialData }) {
         }
     };
 
-    const handleSelectChat = (index) => {
-        const selectedChat = chatHistory[index];
-        setQuery(selectedChat.query);
-        setStructuredResponse(selectedChat.answer); // Assumes structured data
-        setCurrentChat(chatHistory.slice(0, index + 1)); // Set current chat to selected chat history
+    const handleFileChange = (event) => {
+        const selectedFile = event.target.files[0];
+        console.log("Selected file:", selectedFile); // Debugging line
     };
 
     const handleNewChat = () => {
@@ -132,13 +128,8 @@ function MultiAgentConsultant({ initialData }) {
     return (
         <div className="multi-agent-consultant">
             <div className="content">
-                <div className="sidebar">
-                    <ChatHistory
-                        chatHistory={chatHistory}
-                        onSelectChat={handleSelectChat}
-                        onNewChat={handleNewChat}
-                    />
-                </div>
+                {/* Sidebar Component */}
+                <Sidebar />
                 <div className="main-content">
                     <div className="query-section">
                         <textarea
@@ -166,13 +157,8 @@ function MultiAgentConsultant({ initialData }) {
                     flex: 1;
                     padding: 20px;
                 }
-                .sidebar {
-                    width: 25%;
-                    padding: 20px;
-                    overflow-y: auto;
-                }
                 .main-content {
-                    width: 75%;
+                    flex-grow: 1;
                     padding: 20px;
                 }
                 .query-section {
@@ -229,7 +215,7 @@ function MultiAgentConsultant({ initialData }) {
 }
 
 export async function getServerSideProps() {
-    const initialData = { chatHistory: [] };
+    const initialData = {}; // Replace with actual data fetching logic if needed
     return { props: { initialData } };
 }
 

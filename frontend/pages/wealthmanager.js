@@ -1,12 +1,11 @@
 "use client";
 import React, { useState } from "react";
 import axios from "axios";
-import ChatHistory from "../components/ChatHistory";
+import Sidebar from "../components/Sidebar"; // Import the Sidebar component
 
 function WealthManager({ initialData }) {
     const [query, setQuery] = useState("");
     const [answer, setAnswer] = useState("");
-    const [chatHistory, setChatHistory] = useState(initialData.chatHistory || []);
     const [loading, setLoading] = useState(false); // Track loading state
     const [file, setFile] = useState(null); // Track selected file
     const [error, setError] = useState(null); // Track errors
@@ -16,7 +15,6 @@ function WealthManager({ initialData }) {
         setError(null); // Reset error state
         const formData = new FormData();
         formData.append("query", query);
-        formData.append("chat_history", JSON.stringify(chatHistory));
         formData.append("thread_id", "default");
         if (file) {
             formData.append("file", file);
@@ -25,27 +23,20 @@ function WealthManager({ initialData }) {
         try {
             const response = await axios.post("http://127.0.0.1:5000/get_wealth_answer", formData, {
                 headers: {
-                    "Content-Type": "multipart/form-data"
-                }
+                    "Content-Type": "multipart/form-data",
+                },
             });
             const newAnswer = {
                 role: "assistant",
-                content: response.data.answer
+                content: response.data.answer,
             };
             setAnswer(newAnswer.content);
-            setChatHistory([...chatHistory, { query, answer: newAnswer.content }]);
         } catch (error) {
             console.error("Error getting answer:", error);
             setError("Failed to get an answer. Please try again.");
         } finally {
             setLoading(false); // Hide loading spinner
         }
-    };
-
-    const handleSelectChat = (index) => {
-        const selectedChat = chatHistory[index];
-        setQuery(selectedChat.query);
-        setAnswer(selectedChat.answer);
     };
 
     const handleFileChange = (event) => {
@@ -57,9 +48,8 @@ function WealthManager({ initialData }) {
     return (
         <div className="wealth-manager">
             <div className="content">
-                <div className="sidebar">
-                    <ChatHistory chatHistory={chatHistory} onSelectChat={handleSelectChat} />
-                </div>
+                {/* Integrate the Sidebar component */}
+                <Sidebar />
                 <div className="main-content">
                     <div className="query-section">
                         <input
@@ -75,7 +65,9 @@ function WealthManager({ initialData }) {
                             onChange={handleFileChange}
                             className="file-input"
                         />
-                        <button onClick={handleGetAnswer} className="submit-button">Submit</button>
+                        <button onClick={handleGetAnswer} className="submit-button">
+                            Submit
+                        </button>
                     </div>
                     <div className="response-section">
                         {loading ? <p>Loading...</p> : <p>{answer}</p>}
@@ -95,15 +87,8 @@ function WealthManager({ initialData }) {
                     display: flex;
                     flex: 1;
                 }
-                .sidebar {
-                    width: 20%;
-                    background-color: #f7f8fa;
-                    padding: 20px;
-                    border-right: 1px solid #ddd;
-                    overflow-y: auto;
-                }
                 .main-content {
-                    width: 80%;
+                    flex-grow: 1;
                     padding: 20px;
                 }
                 .query-section {
@@ -152,7 +137,7 @@ function WealthManager({ initialData }) {
 
 export async function getServerSideProps() {
     // Fetch initial data for the page
-    const initialData = { chatHistory: [] }; // Replace with actual data fetching logic
+    const initialData = {}; // Replace with actual data fetching logic if needed
     return { props: { initialData } };
 }
 
