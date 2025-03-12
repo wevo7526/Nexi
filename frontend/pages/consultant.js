@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import axios from "axios";
-import ChatHistory from "../components/ChatHistory";
+import Sidebar from "../components/Sidebar"; // Import the Sidebar component
 
 function Consultant({ initialData }) {
     const [query, setQuery] = useState("");
@@ -25,12 +25,12 @@ function Consultant({ initialData }) {
         try {
             const response = await axios.post("http://127.0.0.1:5000/get_answer", formData, {
                 headers: {
-                    "Content-Type": "multipart/form-data"
-                }
+                    "Content-Type": "multipart/form-data",
+                },
             });
             const newAnswer = {
                 role: "assistant",
-                content: response.data.answer
+                content: response.data.answer,
             };
             setAnswer(newAnswer.content);
             setChatHistory([...chatHistory, { query, answer: newAnswer.content }]);
@@ -56,55 +56,42 @@ function Consultant({ initialData }) {
 
     return (
         <div className="consultant">
-            <div className="content">
-                <div className="sidebar">
-                    <ChatHistory chatHistory={chatHistory} onSelectChat={handleSelectChat} />
+            <Sidebar /> {/* Render the Sidebar component */}
+            <div className="main-content">
+                <div className="query-section">
+                    <input
+                        type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Enter your query..."
+                        className="query-input"
+                    />
+                    <input
+                        type="file"
+                        accept=".docx,.pdf,.xls,.xlsx,.ppt,.pptx"
+                        onChange={handleFileChange}
+                        className="file-input"
+                    />
+                    <button onClick={handleGetAnswer} className="submit-button">
+                        Submit
+                    </button>
                 </div>
-                <div className="main-content">
-                    <div className="query-section">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Enter your query..."
-                            className="query-input"
-                        />
-                        <input
-                            type="file"
-                            accept=".docx,.pdf,.xls,.xlsx,.ppt,.pptx"
-                            onChange={handleFileChange}
-                            className="file-input"
-                        />
-                        <button onClick={handleGetAnswer} className="submit-button">Submit</button>
-                    </div>
-                    <div className="response-section">
-                        {loading ? <p>Loading...</p> : <p>{answer}</p>}
-                        {error && <p className="error-message">{error}</p>}
-                    </div>
+                <div className="response-section">
+                    {loading ? <p>Loading...</p> : <p>{answer}</p>}
+                    {error && <p className="error-message">{error}</p>}
                 </div>
             </div>
             <style jsx>{`
                 .consultant {
                     display: flex;
-                    flex-direction: column;
+                    flex-direction: row;
                     min-height: 100vh;
                     background-color: var(--background);
                     font-family: "Geist", sans-serif;
                 }
-                .content {
-                    display: flex;
-                    flex: 1;
-                }
-                .sidebar {
-                    width: 20%;
-                    background-color: #f7f8fa;
-                    padding: 20px;
-                    border-right: 1px solid #ddd;
-                    overflow-y: auto;
-                }
                 .main-content {
-                    width: 80%;
-                    padding: 20px;
+                    flex-grow: 1;
+                    padding: 90px;
                 }
                 .query-section {
                     display: flex;

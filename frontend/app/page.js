@@ -5,7 +5,12 @@ import Link from "next/link";
 export default function Home() {
     return (
         <div className="home">
-            <h1 className="title">Nexi AI</h1>
+            {/* Logo at the top */}
+            <img
+                src="/Nexi.png" // Path to your logo in the public directory
+                alt="Nexi Logo"
+                className="logo"
+            />
             <div className="button-group">
                 <Link href="/consultant">
                     <button className="button">Consultant</button>
@@ -17,11 +22,11 @@ export default function Home() {
                     <button className="button">Team</button> {/* New button */}
                 </Link>
             </div>
-            {/* Footer has been moved */}
+            {/* Footer Section */}
             <p className="footer">Powered by Langchain + Anthropic</p>
             <style jsx>{`
                 .home {
-                    background-color: #f7f8fa; /* Light gray background */
+                    background-color: #ffffff; /* Light gray background */
                     min-height: 100vh;
                     display: flex;
                     flex-direction: column;
@@ -31,10 +36,10 @@ export default function Home() {
                     text-align: center;
                 }
 
-                .title {
-                    font-size: 3rem;
-                    color: #000;
-                    margin-bottom: 50px;
+                .logo {
+                    max-width: 200px; /* Restrict the logo's width */
+                    height: auto; /* Maintain aspect ratio */
+                    margin-bottom: 50px; /* Space below the logo */
                 }
 
                 .button-group {
