@@ -2,11 +2,11 @@
 import React, { useState } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Import the Sidebar component
+import { CircularProgress, Typography, Box } from "@mui/material";
 
 function Consultant({ initialData }) {
     const [query, setQuery] = useState("");
-    const [answer, setAnswer] = useState("");
-    const [chatHistory, setChatHistory] = useState(initialData.chatHistory || []);
+    const [formattedResponse, setFormattedResponse] = useState(null); // Formatted response
     const [loading, setLoading] = useState(false); // Track loading state
     const [file, setFile] = useState(null); // Track selected file
     const [error, setError] = useState(null); // Track errors
@@ -16,7 +16,6 @@ function Consultant({ initialData }) {
         setError(null); // Reset error state
         const formData = new FormData();
         formData.append("query", query);
-        formData.append("chat_history", JSON.stringify(chatHistory));
         formData.append("thread_id", "default");
         if (file) {
             formData.append("file", file);
@@ -28,12 +27,10 @@ function Consultant({ initialData }) {
                     "Content-Type": "multipart/form-data",
                 },
             });
-            const newAnswer = {
-                role: "assistant",
-                content: response.data.answer,
-            };
-            setAnswer(newAnswer.content);
-            setChatHistory([...chatHistory, { query, answer: newAnswer.content }]);
+
+            const content = response.data.answer;
+            const formatted = formatResponse(content); // Clean up and structure the response
+            setFormattedResponse(formatted);
         } catch (error) {
             console.error("Error getting answer:", error);
             setError("Failed to get an answer. Please try again.");
@@ -42,16 +39,19 @@ function Consultant({ initialData }) {
         }
     };
 
-    const handleSelectChat = (index) => {
-        const selectedChat = chatHistory[index];
-        setQuery(selectedChat.query);
-        setAnswer(selectedChat.answer);
-    };
-
     const handleFileChange = (event) => {
         const selectedFile = event.target.files[0];
-        console.log("Selected file:", selectedFile); // Debugging line
         setFile(selectedFile);
+    };
+
+    const formatResponse = (responseContent) => {
+        // Example logic: Split into clean sections with headers if the output has delimited parts
+        const sections = responseContent
+            .split("\n\n") // Separate by double line breaks
+            .map((section) => section.trim()) // Clean up white spaces
+            .filter((section) => section.length > 0); // Remove empty sections
+
+        return sections;
     };
 
     return (
@@ -73,12 +73,25 @@ function Consultant({ initialData }) {
                         className="file-input"
                     />
                     <button onClick={handleGetAnswer} className="submit-button">
-                        Submit
+                        {loading ? <CircularProgress size={20} color="inherit" /> : "Submit"}
                     </button>
                 </div>
+
+                {/* Response Section */}
                 <div className="response-section">
-                    {loading ? <p>Loading...</p> : <p>{answer}</p>}
+                    {loading && <p>Loading...</p>}
                     {error && <p className="error-message">{error}</p>}
+                    {formattedResponse && (
+                        <Box>
+                            {formattedResponse.map((section, index) => (
+                                <Box key={index} sx={{ mb: 3, p: 2, border: "1px solid #ccc", borderRadius: "8px" }}>
+                                    <Typography variant="body1" sx={{ color: "#333" }}>
+                                        {section}
+                                    </Typography>
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
                 </div>
             </div>
             <style jsx>{`
@@ -86,12 +99,11 @@ function Consultant({ initialData }) {
                     display: flex;
                     flex-direction: row;
                     min-height: 100vh;
-                    background-color: var(--background);
-                    font-family: "Geist", sans-serif;
+                    font-family: "Arial", sans-serif;
                 }
                 .main-content {
                     flex-grow: 1;
-                    padding: 90px;
+                    padding: 20px;
                 }
                 .query-section {
                     display: flex;
@@ -117,20 +129,18 @@ function Consultant({ initialData }) {
                     border: none;
                     border-radius: 4px;
                     cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
                 }
                 .submit-button:hover {
                     background-color: #005bb5;
                 }
                 .response-section {
-                    padding: 20px;
-                    background-color: #fff;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                    min-height: 300px;
+                    margin-top: 20px;
                 }
                 .error-message {
                     color: red;
-                    margin-top: 10px;
                 }
             `}</style>
         </div>
@@ -139,7 +149,7 @@ function Consultant({ initialData }) {
 
 export async function getServerSideProps() {
     // Fetch initial data for the page
-    const initialData = { chatHistory: [] }; // Replace with actual data fetching logic
+    const initialData = {}; // Replace with actual data fetching logic
     return { props: { initialData } };
 }
 
