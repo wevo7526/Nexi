@@ -13,6 +13,8 @@ import ListItemText from '@mui/material/ListItemText';
 import BookIcon from '@mui/icons-material/Book';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import HistoryIcon from '@mui/icons-material/History';
+import FolderIcon from '@mui/icons-material/Folder'; // Icon for Documents
+import SearchIcon from '@mui/icons-material/Search'; // Icon for Research
 
 const drawerWidth = 240;
 
@@ -30,7 +32,8 @@ export default function SideMenu() {
   const menuItems = [
     { text: 'Knowledge', icon: <BookIcon fontSize="small" /> },
     { text: 'Reports', icon: <AssessmentIcon fontSize="small" /> },
-    { text: 'History', icon: <HistoryIcon fontSize="small" /> },
+    { text: 'Documents', icon: <FolderIcon fontSize="small" /> }, // New Documents Tab
+    { text: 'Research', icon: <SearchIcon fontSize="small" /> }, // New Research Tab
   ];
 
   return (
@@ -76,6 +79,7 @@ export default function SideMenu() {
         }}
       >
         <List>
+          {/* Render each menu item dynamically */}
           {menuItems.map((item) => (
             <ListItem button key={item.text}>
               <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
@@ -92,6 +96,30 @@ export default function SideMenu() {
       </Box>
 
       <Divider />
+
+      {/* Keep History at the Bottom */}
+      <Box
+        sx={{
+          mt: "auto",
+          px: 2,
+          py: 1,
+        }}
+      >
+        <List>
+          <ListItem button>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <HistoryIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText
+              primary="History"
+              primaryTypographyProps={{
+                fontSize: '0.875rem',
+                fontFamily: 'Roboto, sans-serif',
+              }}
+            />
+          </ListItem>
+        </List>
+      </Box>
 
       {/* Bottom Section for Account */}
       <Stack

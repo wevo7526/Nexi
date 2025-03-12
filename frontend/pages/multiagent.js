@@ -154,7 +154,7 @@ function MultiAgentConsultant({ initialData }) {
                     padding: 10px 20px;
                     border: none;
                     border-radius: 5px;
-                    background-color: #0070f3;
+                    background-color:rgb(11, 11, 11);
                     color: white;
                     font-size: 16px;
                     cursor: pointer;
@@ -163,7 +163,7 @@ function MultiAgentConsultant({ initialData }) {
                     justify-content: center;
                 }
                 .ask-team-button:hover {
-                    background-color: #005bb5;
+                    background-color:rgb(18, 19, 20);
                 }
                 .ask-team-button:disabled {
                     background-color: #ccc;

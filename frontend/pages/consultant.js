@@ -1,8 +1,10 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Import the Sidebar component
 import { CircularProgress, Typography, Box } from "@mui/material";
+import { supabase } from "../supabaseClient"; // Supabase client for authentication
+import { useRouter } from "next/router"; // To handle redirection
 
 function Consultant({ initialData }) {
     const [query, setQuery] = useState("");
@@ -10,7 +12,23 @@ function Consultant({ initialData }) {
     const [loading, setLoading] = useState(false); // Track loading state
     const [file, setFile] = useState(null); // Track selected file
     const [error, setError] = useState(null); // Track errors
+    const [user, setUser] = useState(null); // User authentication state
+    const router = useRouter();
 
+    // Check user session on mount
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.push(`/auth?redirectTo=/consultant`); // Redirect to auth if user is not logged in
+            } else {
+                setUser(user); // Set authenticated user
+            }
+        };
+        checkSession();
+    }, [router]);
+
+    // Handle form submission to get answers
     const handleGetAnswer = async () => {
         setLoading(true); // Show loading spinner
         setError(null); // Reset error state
@@ -39,20 +57,24 @@ function Consultant({ initialData }) {
         }
     };
 
+    // Handle file change event
     const handleFileChange = (event) => {
         const selectedFile = event.target.files[0];
         setFile(selectedFile);
     };
 
+    // Format response content into sections
     const formatResponse = (responseContent) => {
-        // Example logic: Split into clean sections with headers if the output has delimited parts
         const sections = responseContent
-            .split("\n\n") // Separate by double line breaks
-            .map((section) => section.trim()) // Clean up white spaces
-            .filter((section) => section.length > 0); // Remove empty sections
+            .split("\n\n")
+            .map((section) => section.trim())
+            .filter((section) => section.length > 0);
 
         return sections;
     };
+
+    // Show loading state until session is verified
+    if (!user) return <p>Loading...</p>;
 
     return (
         <div className="consultant">
