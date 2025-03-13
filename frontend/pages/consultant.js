@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Import the Sidebar component
+import Navbar from "../components/Navbar"; // Import the Navbar component
 import { CircularProgress, Typography, Box } from "@mui/material";
 import { supabase } from "../supabaseClient"; // Supabase client for authentication
 import { useRouter } from "next/router"; // To handle redirection
@@ -80,6 +81,7 @@ function Consultant({ initialData }) {
         <div className="consultant">
             <Sidebar /> {/* Render the Sidebar component */}
             <div className="main-content">
+                <Navbar /> {/* Render the Navbar component */}
                 <div className="query-section">
                     <input
                         type="text"
@@ -131,6 +133,7 @@ function Consultant({ initialData }) {
                     display: flex;
                     align-items: center;
                     margin-bottom: 20px;
+                    margin-top: 20px; /* Add space between the navbar and the query bar */
                 }
                 .query-input {
                     flex: 1;
