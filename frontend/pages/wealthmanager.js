@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Assuming Sidebar exists for navigation
 import VisualDashboard from "../components/VisualDashboard"; // For rendering charts and graphs
+import Navbar from "../components/Navbar"; // Importing Navbar component
 
 function WealthManager({ initialData }) {
     const [query, setQuery] = useState("");
@@ -48,10 +49,15 @@ function WealthManager({ initialData }) {
 
     return (
         <div className="wealth-manager">
+            <div className="navbar-container">
+                <h1 className="header">Wealth Manager</h1>
+                <div className="navbar-wrapper">
+                    <Navbar />
+                </div>
+            </div>
             <div className="content">
                 <Sidebar />
                 <div className="main-content">
-                    <h1>Wealth Manager</h1>
                     <div className="query-section">
                         <input
                             type="text"
@@ -180,9 +186,27 @@ function WealthManager({ initialData }) {
                     background-color: var(--background);
                     font-family: "Geist", sans-serif;
                 }
+                .navbar-container {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 20px;
+                    background-color: #fff;
+                    border-bottom: 1px solid #ddd;
+                }
+                .header {
+                    margin: 0;
+                }
+                .navbar-wrapper {
+                    display: flex;
+                    justify-content: flex-end;
+                    flex-grow: 1;
+                    padding-right: 20px; /* Add padding to the right */
+                }
                 .content {
                     display: flex;
                     flex: 1;
+                    padding-right: 40px; /* Shift everything to the right even more */
                 }
                 .main-content {
                     flex-grow: 1;
