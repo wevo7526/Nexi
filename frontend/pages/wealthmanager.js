@@ -1,18 +1,18 @@
 "use client";
 import React, { useState } from "react";
 import axios from "axios";
-import Sidebar from "../components/Sidebar"; // Import the Sidebar component
+import Sidebar from "../components/Sidebar"; // Assuming you have a Sidebar component for navigation
 
 function WealthManager({ initialData }) {
     const [query, setQuery] = useState("");
-    const [answer, setAnswer] = useState("");
-    const [loading, setLoading] = useState(false); // Track loading state
-    const [file, setFile] = useState(null); // Track selected file
-    const [error, setError] = useState(null); // Track errors
+    const [answer, setAnswer] = useState(null); // Stores the structured response
+    const [loading, setLoading] = useState(false); // Tracks the loading state
+    const [file, setFile] = useState(null); // Stores the uploaded file
+    const [error, setError] = useState(null); // Tracks errors
 
     const handleGetAnswer = async () => {
-        setLoading(true); // Show loading spinner
-        setError(null); // Reset error state
+        setLoading(true);
+        setError(null);
         const formData = new FormData();
         formData.append("query", query);
         formData.append("thread_id", "default");
@@ -26,31 +26,26 @@ function WealthManager({ initialData }) {
                     "Content-Type": "multipart/form-data",
                 },
             });
-            const newAnswer = {
-                role: "assistant",
-                content: response.data.answer,
-            };
-            setAnswer(newAnswer.content);
+            setAnswer(response.data.answer); // Sets the structured response
         } catch (error) {
             console.error("Error getting answer:", error);
             setError("Failed to get an answer. Please try again.");
         } finally {
-            setLoading(false); // Hide loading spinner
+            setLoading(false);
         }
     };
 
     const handleFileChange = (event) => {
         const selectedFile = event.target.files[0];
-        console.log("Selected file:", selectedFile); // Debugging line
         setFile(selectedFile);
     };
 
     return (
         <div className="wealth-manager">
             <div className="content">
-                {/* Integrate the Sidebar component */}
                 <Sidebar />
                 <div className="main-content">
+                    <h1>Wealth Manager</h1>
                     <div className="query-section">
                         <input
                             type="text"
@@ -70,8 +65,33 @@ function WealthManager({ initialData }) {
                         </button>
                     </div>
                     <div className="response-section">
-                        {loading ? <p>Loading...</p> : <p>{answer}</p>}
-                        {error && <p className="error-message">{error}</p>}
+                        {loading ? (
+                            <p>Loading... Please wait while we analyze your data.</p>
+                        ) : answer && answer.categories ? (
+                            <div>
+                                <h3>Analysis Results:</h3>
+                                <table className="output-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Category</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {answer.categories.map((category, index) => (
+                                            <tr key={index}>
+                                                <td>{category.name}</td>
+                                                <td>{category.details}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : error ? (
+                            <p className="error-message">{error}</p>
+                        ) : (
+                            <p>No data available.</p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -130,15 +150,21 @@ function WealthManager({ initialData }) {
                     color: red;
                     margin-top: 10px;
                 }
+                .output-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                .output-table th,
+                .output-table td {
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                }
+                .output-table th {
+                    background-color: #f4f4f4;
+                }
             `}</style>
         </div>
     );
-}
-
-export async function getServerSideProps() {
-    // Fetch initial data for the page
-    const initialData = {}; // Replace with actual data fetching logic if needed
-    return { props: { initialData } };
 }
 
 export default WealthManager;

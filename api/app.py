@@ -10,17 +10,19 @@ from models.agent_model import ConsultantAgent
 from models.wealth_manager_agent import WealthManagerAgent
 from models.multi_agent_model import MultiAgentConsultant
 
+# Initialize Flask app and enable CORS
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
 # Initialize agents
 consultant_agent = ConsultantAgent()
 wealth_manager_agent = WealthManagerAgent()
-multi_agent_consultant = MultiAgentConsultant()  # New MultiAgentConsultant instance
+multi_agent_consultant = MultiAgentConsultant()
 
 # Create a temporary directory for file uploads
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 @app.route('/get_answer', methods=['POST'])
 def get_answer():
@@ -50,7 +52,7 @@ def get_answer():
 @app.route('/get_wealth_answer', methods=['POST'])
 def get_wealth_answer():
     """
-    Endpoint for WealthManagerAgent.
+    Endpoint for WealthManagerAgent with structured output.
     """
     data = request.form
     query = data.get('query')
@@ -69,8 +71,9 @@ def get_wealth_answer():
     else:
         context = ""
 
-    answer = wealth_manager_agent.get_answer(query, chat_history, thread_id, context)
-    return jsonify({'answer': answer})
+    # Call wealth_manager_agent to get a structured response
+    structured_answer = wealth_manager_agent.get_answer(query, chat_history, thread_id, context)
+    return jsonify({'answer': structured_answer})
 
 @app.route('/get_multi_agent_answer', methods=['POST'])
 def get_multi_agent_answer():
