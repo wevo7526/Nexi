@@ -3,6 +3,7 @@ import os
 from langchain_anthropic import ChatAnthropic
 from data.data_loader import load_data
 from config.settings import API_KEY
+from config.supabase_client import supabase  # Import Supabase client
 from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
     UnstructuredExcelLoader,
@@ -60,7 +61,18 @@ class ConsultantAgent:
         self.docs = loader.load()
         return self.docs
 
-    def get_advice(self, query, thread_id="default"):
+    def save_chat_history(self, user_id, message, role):
+        """
+        Method to save chat history to Supabase.
+        """
+        data = {
+            "user_id": user_id,
+            "message": message,
+            "role": role
+        }
+        supabase.table("chat_history").insert(data).execute()
+
+    def get_advice(self, query, user_id, thread_id="default"):
         """
         Method to get advice based on the user's query.
         """
@@ -72,13 +84,15 @@ class ConsultantAgent:
                 ("human", query)
             ]
             response = self.llm.invoke(messages)
+            self.save_chat_history(user_id, query, "human")
+            self.save_chat_history(user_id, response.content.strip(), "agent")
             return response.content.strip()  # AIMessage ensures content is a string
         except Exception as e:
             print(f"Error encountered: {e}. Retrying in 60 seconds...")
             time.sleep(60)
-            return self.get_advice(query, thread_id)
+            return self.get_advice(query, user_id, thread_id)
 
-    def get_answer(self, query, chat_history=None, thread_id="default", context=""):
+    def get_answer(self, query, user_id, chat_history=None, thread_id="default", context=""):
         """
         Method to answer user queries, including chat history if provided.
         """
@@ -94,8 +108,10 @@ class ConsultantAgent:
             config = {"configurable": {"thread_id": thread_id}}
 
             response = self.llm.invoke(messages)
+            self.save_chat_history(user_id, query, "human")
+            self.save_chat_history(user_id, response.content.strip(), "agent")
             return response.content.strip()  # Ensures clean string output
         except Exception as e:
             print(f"Error encountered: {e}. Retrying in 60 seconds...")
             time.sleep(60)
-            return self.get_answer(query, chat_history, thread_id, context)
+            return self.get_answer(query, user_id, chat_history, thread_id, context)

@@ -8,4 +8,3 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
         persistSession: true,
     }
 });
-
