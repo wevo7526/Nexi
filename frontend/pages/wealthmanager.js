@@ -50,10 +50,7 @@ function WealthManager({ initialData }) {
     return (
         <div className="wealth-manager">
             <div className="navbar-container">
-                <h1 className="header">Wealth Manager</h1>
-                <div className="navbar-wrapper">
                     <Navbar />
-                </div>
             </div>
             <div className="content">
                 <Sidebar />
@@ -179,39 +176,32 @@ function WealthManager({ initialData }) {
                 </div>
             </div>
             <style jsx>{`
-                .wealth-manager {
-                    display: flex;
-                    flex-direction: column;
-                    min-height: 100vh;
-                    background-color: var(--background);
-                    font-family: "Geist", sans-serif;
-                }
-                .navbar-container {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 20px;
-                    background-color: #fff;
-                    border-bottom: 1px solid #ddd;
-                }
-                .header {
-                    margin: 0;
-                }
-                .navbar-wrapper {
-                    display: flex;
-                    justify-content: flex-end;
-                    flex-grow: 1;
-                    padding-right: 20px; /* Add padding to the right */
-                }
-                .content {
-                    display: flex;
-                    flex: 1;
-                    padding-right: 40px; /* Shift everything to the right even more */
-                }
-                .main-content {
-                    flex-grow: 1;
-                    padding: 20px;
-                }
+  .wealth-manager {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background-color: var(--background);
+    font-family: "Geist", sans-serif;
+  }
+  .navbar-container {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background-color: #fff;
+    border-bottom: 1px solid #ddd;
+    position: relative; /* Enables positioning adjustments */
+    left: 15%; /* Moves the navbar 80% across the container's width */
+  }
+  .content {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+  }
+  .main-content {
+    flex-grow: 1;
+    padding: 20px;
+    background-color: var(--content-background);
+  }
                 .query-section {
                     display: flex;
                     align-items: center;
