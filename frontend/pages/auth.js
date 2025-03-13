@@ -65,7 +65,7 @@ export default function Auth() {
                     width: 100%;
                 }
                 .email-input {
-                    width: 100%;
+                    width: 90%;
                     padding: 10px;
                     border: 1px solid #ddd;
                     border-radius: 5px;
@@ -75,7 +75,7 @@ export default function Auth() {
                 .sign-in-button {
                     width: 100%;
                     padding: 10px;
-                    background-color: #0070f3;
+                    background-color:rgb(11, 11, 11);
                     color: #fff;
                     border: none;
                     border-radius: 5px;
@@ -84,11 +84,11 @@ export default function Auth() {
                     transition: background-color 0.3s;
                 }
                 .sign-in-button:hover {
-                    background-color: #005bb5;
+                    background-color:rgb(109, 113, 117);
                 }
                 .message {
                     margin-top: 20px;
-                    color: #0070f3;
+                    color:rgb(15, 15, 16);
                 }
             `}</style>
         </div>

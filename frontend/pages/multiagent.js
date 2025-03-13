@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Import the Sidebar component
+import Navbar from "../components/Navbar"; // Import the Navbar component
 import { CircularProgress, Box, Typography } from "@mui/material";
 
 function MultiAgentConsultant({ initialData }) {
@@ -102,9 +103,11 @@ function MultiAgentConsultant({ initialData }) {
 
     return (
         <div className="multi-agent-consultant">
+            <div className="navbar-container">
+                <Navbar /> {/* Render the Navbar component */}
+            </div>
             <div className="content">
-                {/* Sidebar Component */}
-                <Sidebar />
+                <Sidebar /> {/* Render the Sidebar component */}
                 <div className="main-content">
                     <div className="query-section">
                         <textarea
@@ -128,10 +131,14 @@ function MultiAgentConsultant({ initialData }) {
                     min-height: 100vh;
                     font-family: "Arial", sans-serif;
                 }
+                .navbar-container {
+                    display: flex;
+                    justify-content: center; /* Center the Navbar horizontally */
+                    padding: 0 250px; /* Add padding to the sides */
+                }
                 .content {
                     display: flex;
                     flex: 1;
-                    padding: 20px;
                 }
                 .main-content {
                     flex-grow: 1;
@@ -151,7 +158,8 @@ function MultiAgentConsultant({ initialData }) {
                     font-size: 16px;
                 }
                 .ask-team-button {
-                    padding: 10px 20px;
+                    width: fit-content;
+                    padding: 20px 40px;
                     border: none;
                     border-radius: 5px;
                     background-color:rgb(11, 11, 11);
