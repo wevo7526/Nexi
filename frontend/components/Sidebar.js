@@ -15,6 +15,7 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import HistoryIcon from '@mui/icons-material/History';
 import FolderIcon from '@mui/icons-material/Folder'; // Icon for Documents
 import SearchIcon from '@mui/icons-material/Search'; // Icon for Research
+import { useRouter } from 'next/router'; // Import useRouter from Next.js
 
 const drawerWidth = 240;
 
@@ -29,12 +30,18 @@ const Drawer = styled(MuiDrawer)({
 });
 
 export default function SideMenu() {
+  const router = useRouter(); // Initialize the router
+
   const menuItems = [
-    { text: 'Knowledge', icon: <BookIcon fontSize="small" /> },
-    { text: 'Reports', icon: <AssessmentIcon fontSize="small" /> },
-    { text: 'Documents', icon: <FolderIcon fontSize="small" /> }, // New Documents Tab
-    { text: 'Research', icon: <SearchIcon fontSize="small" /> }, // New Research Tab
+    { text: 'Knowledge', icon: <BookIcon fontSize="small" />, path: '/knowledge' },
+    { text: 'Reports', icon: <AssessmentIcon fontSize="small" />, path: '/reports' },
+    { text: 'Documents', icon: <FolderIcon fontSize="small" />, path: '/documents' }, // New Documents Tab
+    { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/research' }, // New Research Tab
   ];
+
+  const handleNavigation = (path) => {
+    router.push(path); // Navigate to the specified path
+  };
 
   return (
     <Drawer
@@ -81,7 +88,7 @@ export default function SideMenu() {
         <List>
           {/* Render each menu item dynamically */}
           {menuItems.map((item) => (
-            <ListItem button key={item.text}>
+            <ListItem button key={item.text} onClick={() => handleNavigation(item.path)}>
               <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
               <ListItemText
                 primary={item.text}
@@ -106,7 +113,7 @@ export default function SideMenu() {
         }}
       >
         <List>
-          <ListItem button>
+          <ListItem button onClick={() => handleNavigation('/history')}>
             <ListItemIcon sx={{ minWidth: 36 }}>
               <HistoryIcon fontSize="small" />
             </ListItemIcon>
