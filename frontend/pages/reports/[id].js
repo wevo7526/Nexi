@@ -4,6 +4,11 @@ import { useRouter } from 'next/router';
 import Sidebar from '../../components/Sidebar';
 import Navbar from '../../components/Navbar';
 import { createClient } from '@supabase/supabase-js';
+import { getStatusColor, formatDate } from '../../utils/reportUtils';
+
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_KEY) {
+    throw new Error('Missing Supabase environment variables');
+}
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -20,6 +25,32 @@ function ReportView() {
     useEffect(() => {
         if (id) {
             fetchReport();
+            
+            // Set up real-time subscription
+            const subscription = supabase
+                .channel('report_updates')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'reports',
+                        filter: `id=eq.${id}`
+                    },
+                    (payload) => {
+                        console.log('Report updated:', payload);
+                        setReport(prevReport => ({
+                            ...prevReport,
+                            ...payload.new
+                        }));
+                    }
+                )
+                .subscribe();
+
+            // Cleanup subscription on unmount
+            return () => {
+                subscription.unsubscribe();
+            };
         }
     }, [id]);
 
@@ -38,6 +69,8 @@ function ReportView() {
                 .single();
 
             if (error) throw error;
+            if (!data) throw new Error('Report not found');
+            
             setReport(data);
         } catch (err) {
             console.error('Error fetching report:', err);
@@ -47,46 +80,113 @@ function ReportView() {
         }
     };
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'completed':
-                return '#0e8a0e';
-            case 'in_progress':
-                return '#b58a0e';
-            case 'failed':
-                return '#dc3545';
-            default:
-                return '#666';
+    const handleRetry = () => {
+        setLoading(true);
+        setError(null);
+        fetchReport();
+    };
+
+    const handleDelete = async () => {
+        if (!window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('reports')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+            router.push('/reports');
+        } catch (err) {
+            console.error('Error deleting report:', err);
+            alert('Failed to delete report. Please try again.');
         }
     };
 
-    if (loading) return (
-        <div className="report-view-page">
-            <div className="navbar-container">
-                <Navbar />
-            </div>
-            <div className="content">
-                <Sidebar />
-                <div className="main-content">
-                    <div className="loading">Loading report...</div>
-                </div>
-            </div>
-        </div>
-    );
+    const renderContent = (content) => {
+        if (!content) return null;
 
-    if (error) return (
-        <div className="report-view-page">
-            <div className="navbar-container">
-                <Navbar />
-            </div>
-            <div className="content">
-                <Sidebar />
-                <div className="main-content">
-                    <div className="error-message">{error}</div>
+        return Object.entries(content).map(([section, data]) => {
+            const sectionTitle = section.replace(/_/g, ' ');
+            
+            if (Array.isArray(data)) {
+                return (
+                    <div key={section} className="report-section">
+                        <h3>{sectionTitle}</h3>
+                        <ul className="section-list">
+                            {data.map((item, index) => (
+                                <li key={index}>{item}</li>
+                            ))}
+                        </ul>
+                    </div>
+                );
+            }
+
+            if (typeof data === 'object') {
+                return (
+                    <div key={section} className="report-section">
+                        <h3>{sectionTitle}</h3>
+                        <pre className="section-json">
+                            {JSON.stringify(data, null, 2)}
+                        </pre>
+                    </div>
+                );
+            }
+
+            return (
+                <div key={section} className="report-section">
+                    <h3>{sectionTitle}</h3>
+                    <div className="section-content">{data}</div>
+                </div>
+            );
+        });
+    };
+
+    if (loading) {
+        return (
+            <div className="report-view-page">
+                <div className="navbar-container">
+                    <Navbar />
+                </div>
+                <div className="content">
+                    <Sidebar />
+                    <div className="main-content">
+                        <div className="loading">
+                            <div className="loading-spinner"></div>
+                            <p>Loading report...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="report-view-page">
+                <div className="navbar-container">
+                    <Navbar />
+                </div>
+                <div className="content">
+                    <Sidebar />
+                    <div className="main-content">
+                        <div className="error-message">
+                            <h2>Error</h2>
+                            <p>{error}</p>
+                            <button onClick={handleRetry} className="retry-button">
+                                Retry
+                            </button>
+                            <button onClick={() => router.back()} className="back-button">
+                                Back to Reports
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="report-view-page">
@@ -108,9 +208,14 @@ function ReportView() {
                                         {report.status}
                                     </div>
                                 </div>
-                                <button onClick={() => router.back()} className="back-button">
-                                    Back to Reports
-                                </button>
+                                <div className="header-actions">
+                                    <button onClick={() => router.back()} className="back-button">
+                                        Back to Reports
+                                    </button>
+                                    <button onClick={handleDelete} className="delete-button">
+                                        Delete Report
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="report-content">
@@ -131,8 +236,14 @@ function ReportView() {
                                         </div>
                                         <div className="detail-item">
                                             <label>Created</label>
-                                            <span>{new Date(report.created_at).toLocaleDateString()}</span>
+                                            <span>{formatDate(report.created_at)}</span>
                                         </div>
+                                        {report.completed_at && (
+                                            <div className="detail-item">
+                                                <label>Completed</label>
+                                                <span>{formatDate(report.completed_at)}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -158,17 +269,15 @@ function ReportView() {
                                     <div className="info-card">
                                         <h2>Report Content</h2>
                                         <div className="report-sections">
-                                            {Object.entries(report.content).map(([section, content]) => (
-                                                <div key={section} className="report-section">
-                                                    <h3>{section.replace(/_/g, ' ')}</h3>
-                                                    <div className="section-content">
-                                                        {typeof content === 'string' 
-                                                            ? content
-                                                            : JSON.stringify(content, null, 2)}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                            {renderContent(report.content)}
                                         </div>
+                                    </div>
+                                )}
+
+                                {report.error_message && (
+                                    <div className="info-card error-card">
+                                        <h2>Error Details</h2>
+                                        <p className="error-message">{report.error_message}</p>
                                     </div>
                                 )}
                             </div>
@@ -331,43 +440,109 @@ function ReportView() {
                     white-space: pre-wrap;
                 }
 
+                .header-actions {
+                    display: flex;
+                    gap: 1rem;
+                }
+
+                .delete-button {
+                    padding: 0.75rem 1.5rem;
+                    background-color: #dc3545;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    cursor: pointer;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    transition: background-color 0.2s ease;
+                }
+
+                .delete-button:hover {
+                    background-color: #c82333;
+                }
+
                 .loading {
                     text-align: center;
-                    padding: 2rem;
+                    padding: 4rem 2rem;
                     color: #666;
                 }
 
-                .error-message {
-                    background-color: #ffe6e6;
-                    color: #dc3545;
+                .loading-spinner {
+                    border: 3px solid #f3f3f3;
+                    border-top: 3px solid #0070f3;
+                    border-radius: 50%;
+                    width: 24px;
+                    height: 24px;
+                    animation: spin 1s linear infinite;
+                    margin: 0 auto 1rem;
+                }
+
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+
+                .section-list {
+                    list-style-type: none;
+                    padding: 0;
+                    margin: 0;
+                }
+
+                .section-list li {
+                    padding: 0.5rem 0;
+                    border-bottom: 1px solid #f0f0f0;
+                }
+
+                .section-list li:last-child {
+                    border-bottom: none;
+                }
+
+                .section-json {
+                    background-color: #f8f9fa;
                     padding: 1rem;
                     border-radius: 8px;
-                    margin: 1rem 0;
+                    font-family: monospace;
+                    white-space: pre-wrap;
+                    overflow-x: auto;
+                }
+
+                .error-card {
+                    border: 1px solid #dc3545;
+                }
+
+                .error-card h2 {
+                    color: #dc3545;
+                }
+
+                .retry-button {
+                    padding: 0.75rem 1.5rem;
+                    background-color: #0070f3;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    cursor: pointer;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    transition: background-color 0.2s ease;
+                    margin-right: 1rem;
+                }
+
+                .retry-button:hover {
+                    background-color: #0060df;
                 }
 
                 @media (max-width: 768px) {
-                    .navbar-container,
-                    .main-content {
-                        margin-left: 0;
-                    }
-
-                    .main-content {
-                        padding: 1.5rem;
-                        max-width: 100vw;
-                    }
-
-                    .header {
+                    .header-actions {
                         flex-direction: column;
-                        align-items: flex-start;
-                        gap: 1rem;
-                    }
-
-                    .back-button {
                         width: 100%;
                     }
 
-                    .details-grid {
-                        grid-template-columns: 1fr;
+                    .header-actions button {
+                        width: 100%;
+                    }
+
+                    .section-json {
+                        font-size: 0.875rem;
                     }
                 }
             `}</style>
