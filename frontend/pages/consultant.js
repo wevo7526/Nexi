@@ -7,10 +7,14 @@ import {
     CircularProgress, Typography, Box, Card, Grid, Button,
     IconButton, TextField, Paper, Table, TableBody,
     TableCell, TableContainer, TableHead, TableRow,
-    InputAdornment, Badge
+    InputAdornment, Badge, Tabs, Tab, Accordion,
+    AccordionSummary, AccordionDetails, Chip, Stack,
+    LinearProgress
 } from "@mui/material";
 import {
-    AttachFile, Send, Delete, SaveAlt
+    AttachFile, Send, Delete, SaveAlt,
+    ExpandMore, Assessment, Timeline,
+    TrendingUp, Assignment
 } from "@mui/icons-material";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
@@ -22,6 +26,7 @@ function Consultant({ initialData }) {
     const [file, setFile] = useState(null);
     const [error, setError] = useState(null);
     const [user, setUser] = useState(null);
+    const [activeTab, setActiveTab] = useState(0);
     const router = useRouter();
     const { showToast } = useToast();
 
@@ -100,98 +105,160 @@ function Consultant({ initialData }) {
         setFile(selectedFile);
     };
 
-    const renderStructuredAnalysis = (content) => {
-        // Extract SWOT analysis
-        const swotMatch = content.match(/SWOT Analysis:([\s\S]*?)(?=\n\n|$)/i);
-        const swotData = swotMatch ? parseSwotData(swotMatch[1]) : null;
+    const renderAnalysisSection = (title, content, icon) => (
+        <Accordion defaultExpanded sx={{ mb: 2 }}>
+            <AccordionSummary 
+                expandIcon={<ExpandMore />}
+                sx={{ 
+                    bgcolor: 'primary.main', 
+                    color: 'white',
+                    '&:hover': { bgcolor: 'primary.dark' }
+                }}
+            >
+                <Stack direction="row" spacing={1} alignItems="center">
+                    {icon}
+                    <Typography variant="h6">{title}</Typography>
+                </Stack>
+            </AccordionSummary>
+            <AccordionDetails>
+                {content}
+            </AccordionDetails>
+        </Accordion>
+    );
 
-        // Extract PESTEL analysis
+    const renderStructuredAnalysis = (content) => {
+        // Extract different analyses
+        const swotMatch = content.match(/SWOT Analysis:([\s\S]*?)(?=\n\n|$)/i);
         const pestelMatch = content.match(/PESTEL Analysis:([\s\S]*?)(?=\n\n|$)/i);
-        const pestelData = pestelMatch ? parsePestelData(pestelMatch[1]) : null;
+        const recommendationsMatch = content.match(/Recommendations:([\s\S]*?)(?=\n\n|$)/i);
+        const nextStepsMatch = content.match(/Next Steps:([\s\S]*?)(?=\n\n|$)/i);
 
         return (
             <Box>
-                {swotData && (
-                    <Card sx={{ mb: 3, p: 2 }}>
-                        <Typography variant="h6" gutterBottom>SWOT Analysis</Typography>
-                        <TableContainer>
-                            <Table>
-                                <TableBody>
-                                    <TableRow>
-                                        <TableCell sx={{ width: '50%', borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                                            <Typography variant="subtitle2" gutterBottom>Strengths</Typography>
-                                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                                {swotData.strengths.map((item, index) => (
-                                                    <li key={index}>{item}</li>
-                                                ))}
-                                            </ul>
-                                        </TableCell>
-                                        <TableCell sx={{ width: '50%' }}>
-                                            <Typography variant="subtitle2" gutterBottom>Weaknesses</Typography>
-                                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                                {swotData.weaknesses.map((item, index) => (
-                                                    <li key={index}>{item}</li>
-                                                ))}
-                                            </ul>
-                                        </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                        <TableCell sx={{ borderRight: '1px solid rgba(224, 224, 224, 1)' }}>
-                                            <Typography variant="subtitle2" gutterBottom>Opportunities</Typography>
-                                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                                {swotData.opportunities.map((item, index) => (
-                                                    <li key={index}>{item}</li>
-                                                ))}
-                                            </ul>
+                {swotMatch && renderAnalysisSection("SWOT Analysis", 
+                    <TableContainer>
+                        <Table>
+                            <TableBody>
+                                <TableRow>
+                                    <TableCell sx={{ 
+                                        width: '50%', 
+                                        borderRight: '1px solid rgba(224, 224, 224, 1)',
+                                        bgcolor: 'success.light'
+                                    }}>
+                                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                            Strengths
+                                        </Typography>
+                                        <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                                            {parseListItems(swotMatch[1], 'Strengths')}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell sx={{ 
+                                        width: '50%',
+                                        bgcolor: 'error.light'
+                                    }}>
+                                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                            Weaknesses
+                                        </Typography>
+                                        <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                                            {parseListItems(swotMatch[1], 'Weaknesses')}
+                                        </Box>
+                                    </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell sx={{ 
+                                        borderRight: '1px solid rgba(224, 224, 224, 1)',
+                                        bgcolor: 'info.light'
+                                    }}>
+                                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                            Opportunities
+                                        </Typography>
+                                        <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                                            {parseListItems(swotMatch[1], 'Opportunities')}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell sx={{ bgcolor: 'warning.light' }}>
+                                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                            Threats
+                                        </Typography>
+                                        <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                                            {parseListItems(swotMatch[1], 'Threats')}
+                                        </Box>
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </TableContainer>,
+                    <Assessment />
+                )}
+
+                {pestelMatch && renderAnalysisSection("PESTEL Analysis",
+                    <TableContainer>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell width="20%">Factor</TableCell>
+                                    <TableCell>Analysis</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {['Political', 'Economic', 'Social', 'Technological', 'Environmental', 'Legal'].map((factor) => (
+                                    <TableRow key={factor} sx={{ 
+                                        '&:nth-of-type(odd)': { bgcolor: 'action.hover' }
+                                    }}>
+                                        <TableCell>
+                                            <Typography variant="subtitle2" fontWeight="bold">
+                                                {factor}
+                                            </Typography>
                                         </TableCell>
                                         <TableCell>
-                                            <Typography variant="subtitle2" gutterBottom>Threats</Typography>
-                                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                                {swotData.threats.map((item, index) => (
-                                                    <li key={index}>{item}</li>
-                                                ))}
-                                            </ul>
+                                            <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                                                {parseListItems(pestelMatch[1], factor)}
+                                            </Box>
                                         </TableCell>
                                     </TableRow>
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </Card>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>,
+                    <Timeline />
                 )}
 
-                {pestelData && (
-                    <Card sx={{ mb: 3, p: 2 }}>
-                        <Typography variant="h6" gutterBottom>PESTEL Analysis</Typography>
-                        <TableContainer>
-                            <Table>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Factor</TableCell>
-                                        <TableCell>Analysis</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {Object.entries(pestelData).map(([factor, analysis]) => (
-                                        <TableRow key={factor}>
-                                            <TableCell sx={{ width: '20%' }}>
-                                                <Typography variant="subtitle2">{factor}</Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                                    {analysis.map((item, index) => (
-                                                        <li key={index}>{item}</li>
-                                                    ))}
-                                                </ul>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </Card>
+                {recommendationsMatch && renderAnalysisSection("Recommendations",
+                    <Box>
+                        <Stack spacing={1}>
+                            {parseListItems(recommendationsMatch[1]).map((item, index) => (
+                                <Paper key={index} elevation={1} sx={{ p: 2, bgcolor: 'primary.light' }}>
+                                    <Typography variant="body1" color="primary.contrastText">
+                                        {item}
+                                    </Typography>
+                                </Paper>
+                            ))}
+                        </Stack>
+                    </Box>,
+                    <TrendingUp />
                 )}
 
-                {!swotData && !pestelData && (
+                {nextStepsMatch && renderAnalysisSection("Implementation Plan",
+                    <Box>
+                        <Stack spacing={2}>
+                            {parseListItems(nextStepsMatch[1]).map((item, index) => (
+                                <Paper key={index} elevation={2} sx={{ p: 2 }}>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                        <Chip 
+                                            label={`Step ${index + 1}`} 
+                                            color="primary" 
+                                            sx={{ minWidth: 80 }}
+                                        />
+                                        <Typography variant="body1">{item}</Typography>
+                                    </Stack>
+                                </Paper>
+                            ))}
+                        </Stack>
+                    </Box>,
+                    <Assignment />
+                )}
+
+                {!swotMatch && !pestelMatch && !recommendationsMatch && !nextStepsMatch && (
                     <Card sx={{ mb: 3, p: 2 }}>
                         <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
                             {content}
@@ -202,54 +269,28 @@ function Consultant({ initialData }) {
         );
     };
 
-    const parseSwotData = (text) => {
-        const sections = {
-            strengths: [],
-            weaknesses: [],
-            opportunities: [],
-            threats: []
-        };
+    const parseListItems = (text, section = null) => {
+        const items = [];
+        const lines = text.split('\n');
+        let inSection = !section;
 
-        let currentSection = null;
-        text.split('\n').forEach(line => {
-            line = line.trim();
-            if (line.toLowerCase().includes('strengths')) currentSection = 'strengths';
-            else if (line.toLowerCase().includes('weaknesses')) currentSection = 'weaknesses';
-            else if (line.toLowerCase().includes('opportunities')) currentSection = 'opportunities';
-            else if (line.toLowerCase().includes('threats')) currentSection = 'threats';
-            else if (line && currentSection && !line.includes(':')) {
-                sections[currentSection].push(line.replace(/^[•\-]\s*/, ''));
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
+            if (section && trimmedLine.toLowerCase().includes(section.toLowerCase())) {
+                inSection = true;
+                continue;
+            } else if (section && trimmedLine.match(/^[A-Z]/)) {
+                inSection = false;
             }
-        });
 
-        return sections;
-    };
-
-    const parsePestelData = (text) => {
-        const sections = {
-            Political: [],
-            Economic: [],
-            Social: [],
-            Technological: [],
-            Environmental: [],
-            Legal: []
-        };
-
-        let currentSection = null;
-        text.split('\n').forEach(line => {
-            line = line.trim();
-            if (line.toLowerCase().includes('political')) currentSection = 'Political';
-            else if (line.toLowerCase().includes('economic')) currentSection = 'Economic';
-            else if (line.toLowerCase().includes('social')) currentSection = 'Social';
-            else if (line.toLowerCase().includes('technological')) currentSection = 'Technological';
-            else if (line.toLowerCase().includes('environmental')) currentSection = 'Environmental';
-            else if (line.toLowerCase().includes('legal')) currentSection = 'Legal';
-            else if (line && currentSection && !line.includes(':')) {
-                sections[currentSection].push(line.replace(/^[•\-]\s*/, ''));
+            if (inSection && !trimmedLine.match(/^[A-Z][a-z]+:/)) {
+                items.push(trimmedLine.replace(/^[•\-]\s*/, ''));
             }
-        });
+        }
 
-        return sections;
+        return items;
     };
 
     return (
@@ -257,8 +298,7 @@ function Consultant({ initialData }) {
             <div className="content">
                 <Sidebar />
                 <div className="main-content">
-                    {/* Query Section */}
-                    <Card sx={{ mb: 3, p: 2 }}>
+                    <Card sx={{ mb: 3, p: 2, bgcolor: 'background.paper' }}>
                         <Grid container spacing={2}>
                             <Grid item xs={12}>
                                 <TextField
@@ -296,7 +336,7 @@ function Consultant({ initialData }) {
                             <Grid item xs={12} container justifyContent="space-between" alignItems="center">
                                 <Grid item>
                                     {file && (
-                                        <Badge
+                                        <Chip
                                             label={file.name}
                                             onDelete={() => setFile(null)}
                                             sx={{ mr: 1 }}
@@ -309,6 +349,10 @@ function Consultant({ initialData }) {
                                         onClick={handleGetAnswer}
                                         disabled={loading || !query.trim()}
                                         startIcon={loading ? <CircularProgress size={20} /> : <Send />}
+                                        sx={{
+                                            bgcolor: 'primary.main',
+                                            '&:hover': { bgcolor: 'primary.dark' }
+                                        }}
                                     >
                                         {loading ? 'Analyzing...' : 'Analyze'}
                                     </Button>
@@ -317,7 +361,12 @@ function Consultant({ initialData }) {
                         </Grid>
                     </Card>
 
-                    {/* Analysis Output */}
+                    {loading && (
+                        <Box sx={{ width: '100%', mb: 3 }}>
+                            <LinearProgress />
+                        </Box>
+                    )}
+
                     {currentConversation && currentConversation.messages.map((message, index) => (
                         message.role === 'assistant' && (
                             <Box key={index}>
@@ -339,8 +388,7 @@ function Consultant({ initialData }) {
                     display: flex;
                     flex-direction: column;
                     min-height: 100vh;
-                    background-color: var(--background);
-                    font-family: "Geist", sans-serif;
+                    background-color: #f5f5f5;
                 }
                 .content {
                     display: flex;
@@ -350,7 +398,7 @@ function Consultant({ initialData }) {
                 .main-content {
                     flex-grow: 1;
                     padding: 20px;
-                    background-color: var(--content-background);
+                    background-color: #f5f5f5;
                 }
             `}</style>
         </div>
