@@ -7,7 +7,10 @@ export default class AuthHandler {
                 email,
                 password,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/auth-redirect`
+                    emailRedirectTo: `${window.location.origin}/auth-redirect?redirectTo=/profile/create`,
+                    data: {
+                        isNewUser: true
+                    }
                 }
             })
             

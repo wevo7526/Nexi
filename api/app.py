@@ -31,6 +31,7 @@ from models.agent_model import ConsultantAgent
 from models.wealth_manager_agent import WealthManagerAgent
 from models.multi_agent_model import MultiAgentConsultant
 from reports import reports_bp
+from onboarding import onboarding
 
 # Initialize Flask app and enable CORS
 app = Flask(__name__)
@@ -44,6 +45,9 @@ if missing_vars:
 
 # Register the reports blueprint
 app.register_blueprint(reports_bp)
+
+# Register the onboarding blueprint
+app.register_blueprint(onboarding, url_prefix='/api/onboarding')
 
 # Initialize agents
 consultant_agent = ConsultantAgent()

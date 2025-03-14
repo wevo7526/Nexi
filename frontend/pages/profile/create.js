@@ -1,225 +1,185 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import {
-    Box,
-    Paper,
-    TextField,
-    Button,
-    Typography,
-    CircularProgress,
-    Alert,
-} from "@mui/material";
-import { createClient } from '@supabase/supabase-js';
-import Sidebar from "../../components/Sidebar";
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { supabase } from '../../lib/supabaseClient';
+import Head from 'next/head';
+import Image from 'next/image';
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
-function ProfileCreation() {
-    const [messages, setMessages] = useState([]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [userId, setUserId] = useState(null);
-    const messagesEndRef = useRef(null);
+export default function CreateProfile() {
+    const [session, setSession] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [message, setMessage] = useState({ type: '', content: '' });
+    const router = useRouter();
 
     useEffect(() => {
-        checkAuth();
+        // Check authentication status
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+            setLoading(false);
+            if (!session) {
+                router.push('/auth');
+            }
+        });
+
+        // Listen for auth changes
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+            if (!session) {
+                router.push('/auth');
+            }
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
-
-    const checkAuth = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            setUserId(user.id);
-            // Start the conversation
-            handleSendMessage("Hi, I'd like to create my wealth management profile.");
-        }
-    };
-
-    const handleSendMessage = async (messageText) => {
-        if (!messageText.trim()) return;
+    const startOnboarding = async () => {
+        if (!session?.user?.id) return;
 
         setLoading(true);
-        setError(null);
-
-        // Add user message to chat
-        const userMessage = { type: 'user', content: messageText };
-        setMessages(prev => [...prev, userMessage]);
-        setInput('');
-
+        setMessage({ type: '', content: '' });
+        
         try {
-            const response = await fetch(`${API_URL}/api/onboarding/chat`, {
+            const response = await fetch('http://localhost:5000/api/onboarding/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Origin': window.location.origin
                 },
-                credentials: 'same-origin',
                 body: JSON.stringify({
-                    user_id: userId,
-                    message: messageText
-                })
+                    user_id: session.user.id,
+                    message: "start"
+                }),
+                mode: 'cors',
+                credentials: 'include'
             });
 
+            // Handle non-JSON responses
+            let data;
+            try {
+                const text = await response.text();
+                data = text ? JSON.parse(text) : {};
+            } catch (parseError) {
+                console.error('Failed to parse response:', parseError);
+                throw new Error('Invalid response from server. Please ensure the backend server is running.');
+            }
+            
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                throw new Error(data.error || `Server error: ${response.status}`);
             }
 
-            const data = await response.json();
+            // Redirect to the chat interface - we'll handle profile status updates in the chat interface
+            router.push(`/onboarding/chat`);
 
-            // Add AI response to chat
-            const aiMessage = { 
-                type: 'assistant', 
-                content: data.response,
-                profileData: data.profile_data,
-                isComplete: data.is_complete
-            };
-            setMessages(prev => [...prev, aiMessage]);
-
-            if (data.is_complete) {
-                // Add completion message
-                setMessages(prev => [...prev, {
-                    type: 'system',
-                    content: 'Profile creation complete! Your information has been saved.'
-                }]);
+        } catch (error) {
+            console.error('Onboarding error:', error);
+            let errorMessage = error.message;
+            
+            // Handle specific network errors
+            if (error instanceof TypeError && error.message.includes('NetworkError')) {
+                errorMessage = 'Unable to connect to the server. Please ensure the backend server is running at http://localhost:5000';
             }
-
-        } catch (err) {
-            console.error('API Error:', err);
-            setError(err.message || 'Failed to communicate with the server');
-            setMessages(prev => [...prev, {
-                type: 'system',
-                content: 'Sorry, there was an error processing your message. Please try again.'
-            }]);
-        } finally {
+            
+            setMessage({
+                type: 'error',
+                content: errorMessage || 'Failed to start onboarding process. Please try again.'
+            });
             setLoading(false);
         }
     };
 
-    const handleKeyPress = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage(input);
-        }
-    };
-
-    const renderMessage = (message, index) => {
-        const isUser = message.type === 'user';
-        const isSystem = message.type === 'system';
-
+    if (loading) {
         return (
-            <Box
-                key={index}
-                sx={{
-                    display: 'flex',
-                    justifyContent: isUser ? 'flex-end' : 'flex-start',
-                    mb: 2
-                }}
-            >
-                <Paper
-                    sx={{
-                        p: 2,
-                        maxWidth: '70%',
-                        bgcolor: isSystem ? 'info.light' : 
-                                isUser ? 'primary.light' : 'background.paper',
-                        color: isUser ? 'white' : 'text.primary'
-                    }}
-                >
-                    <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {message.content}
-                    </Typography>
-                </Paper>
-            </Box>
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-900 to-gray-800">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+            </div>
         );
-    };
+    }
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-            <Box sx={{ display: 'flex', flexDirection: 'row', flexGrow: 1 }}>
-                <Sidebar />
-                <Box sx={{ 
-                    flexGrow: 1, 
-                    p: 3, 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    height: '100vh'
-                }}>
-                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 500 }}>
-                        Create Wealth Management Profile
-                    </Typography>
+        <>
+            <Head>
+                <title>Create Your Profile | Nexi</title>
+                <meta name="description" content="Set up your wealth management profile" />
+            </Head>
 
-                    {error && (
-                        <Alert severity="error" sx={{ mb: 2 }}>
-                            {error}
-                        </Alert>
-                    )}
+            <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
+                <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+                    {/* Logo */}
+                    <div className="flex justify-center mb-8">
+                        <Image
+                            src="/Nexi.png"
+                            alt="Nexi Logo"
+                            width={160}
+                            height={53}
+                            priority
+                            className="h-10 w-auto"
+                        />
+                    </div>
 
-                    <Paper 
-                        sx={{ 
-                            p: 3,
-                            flexGrow: 1,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            maxHeight: 'calc(100vh - 200px)',
-                            mb: 2
-                        }}
-                    >
-                        <Box sx={{ 
-                            flexGrow: 1, 
-                            overflowY: 'auto',
-                            mb: 2
-                        }}>
-                            {messages.map((message, index) => renderMessage(message, index))}
-                            <div ref={messagesEndRef} />
-                        </Box>
+                    <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-xl overflow-hidden border border-gray-700/50">
+                        <div className="p-6 sm:p-8">
+                            <div className="text-center">
+                                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent mb-4">
+                                    Welcome to Your Wealth Journey
+                                </h1>
+                                <p className="text-lg text-gray-300 mb-8">
+                                    Let's create your personalized wealth management profile with our AI-powered assistant
+                                </p>
+                            </div>
 
-                        <Box sx={{ 
-                            display: 'flex', 
-                            gap: 2,
-                            mt: 'auto'
-                        }}>
-                            <TextField
-                                fullWidth
-                                multiline
-                                maxRows={4}
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onKeyPress={handleKeyPress}
-                                placeholder="Type your message..."
-                                disabled={loading}
-                            />
-                            <Button
-                                variant="contained"
-                                onClick={() => handleSendMessage(input)}
-                                disabled={loading || !input.trim()}
-                                sx={{ minWidth: '80px', height: '40px' }}
-                            >
-                                {loading ? (
-                                    <CircularProgress size={20} sx={{ color: 'inherit' }} />
-                                ) : (
-                                    'Send'
-                                )}
-                            </Button>
-                        </Box>
-                    </Paper>
-                </Box>
-            </Box>
-        </Box>
+                            <div className="space-y-4 mb-8">
+                                <div className="bg-gray-800/80 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50">
+                                    <h3 className="text-lg font-semibold text-blue-400 mb-2">AI-Powered Analysis</h3>
+                                    <p className="text-gray-400 text-sm leading-relaxed">Our AI will analyze your financial goals and create a personalized strategy tailored to your needs.</p>
+                                </div>
+
+                                <div className="bg-gray-800/80 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50">
+                                    <h3 className="text-lg font-semibold text-blue-400 mb-2">Secure & Private</h3>
+                                    <p className="text-gray-400 text-sm leading-relaxed">Your data is encrypted and protected with enterprise-grade security measures.</p>
+                                </div>
+
+                                <div className="bg-gray-800/80 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50">
+                                    <h3 className="text-lg font-semibold text-blue-400 mb-2">Quick Setup</h3>
+                                    <p className="text-gray-400 text-sm leading-relaxed">Complete your profile in minutes with our streamlined onboarding process.</p>
+                                </div>
+                            </div>
+
+                            {message.content && (
+                                <div className={`mb-6 p-4 rounded-lg ${
+                                    message.type === 'error' 
+                                        ? 'bg-red-500/10 text-red-200 border border-red-500/20' 
+                                        : 'bg-green-500/10 text-green-200 border border-green-500/20'
+                                }`}>
+                                    {message.content}
+                                </div>
+                            )}
+
+                            <div className="flex justify-center">
+                                <button
+                                    onClick={startOnboarding}
+                                    disabled={loading}
+                                    className={`
+                                        w-full sm:w-auto
+                                        px-8 py-3 text-base font-medium rounded-xl
+                                        bg-gradient-to-r from-blue-600 to-blue-700
+                                        text-white shadow-lg
+                                        transition-all duration-200
+                                        hover:translate-y-[-1px] hover:shadow-lg hover:shadow-blue-500/25
+                                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800
+                                        disabled:opacity-50 disabled:cursor-not-allowed
+                                    `}
+                                >
+                                    {loading ? 'Starting...' : 'Begin Profile Setup'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
     );
-}
-
-export default ProfileCreation; 
+} 

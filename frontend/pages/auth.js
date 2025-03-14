@@ -15,6 +15,7 @@ export default function Auth() {
     const [message, setMessage] = useState({ type: '', content: '' });
     const router = useRouter();
     const { redirectTo } = router.query;
+    const authHandler = new AuthHandler();
 
     const validateEmail = (email) => {
         return email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
@@ -45,7 +46,10 @@ export default function Auth() {
                 email,
                 password,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/auth-redirect?redirectTo=${encodeURIComponent(redirectTo || '/consultant')}`,
+                    emailRedirectTo: `${window.location.origin}/auth-redirect?redirectTo=/profile/create`,
+                    data: {
+                        isNewUser: true
+                    }
                 }
             });
 
@@ -64,9 +68,9 @@ export default function Auth() {
             setEmail('');
             setPassword('');
 
-            // Redirect to consultant page after successful signup
+            // Redirect to profile creation page for onboarding
             setTimeout(() => {
-                router.push('/consultant');
+                router.push('/profile/create');
             }, 2000);
 
         } catch (err) {
