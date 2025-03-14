@@ -1,24 +1,19 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar";
-import Navbar from "../components/Navbar";
-import { 
-    CircularProgress, 
-    Typography, 
-    Box,
-    Card,
-    Grid,
-    Button,
-    IconButton,
-    Chip,
-    Menu,
-    MenuItem,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions
+import { useToast } from "../components/ToastProvider";
+import { useTheme } from '@mui/material/styles';
+import {
+    CircularProgress, Typography, Box, Card, Grid, Button,
+    IconButton, TextField, Paper, Divider, Chip, Dialog,
+    DialogTitle, DialogContent, DialogActions, useMediaQuery,
+    Skeleton, LinearProgress, Tooltip
 } from "@mui/material";
+import {
+    AttachFile, Send, Delete, SaveAlt, History,
+    Refresh, MoreVert, FilterList
+} from "@mui/icons-material";
 import { supabase } from "../supabaseClient";
 import { useRouter } from "next/router";
 
@@ -46,6 +41,32 @@ const QUERY_TEMPLATES = {
     ]
 };
 
+// Add these utility functions at the top
+const saveConversationToSupabase = async (conversation) => {
+    try {
+        const { error } = await supabase
+            .from('conversations')
+            .insert([conversation]);
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error saving conversation:", error);
+        throw error;
+    }
+};
+
+const updateConversationInSupabase = async (conversation) => {
+    try {
+        const { error } = await supabase
+            .from('conversations')
+            .update(conversation)
+            .eq('id', conversation.id);
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error updating conversation:", error);
+        throw error;
+    }
+};
+
 function Consultant({ initialData }) {
     const [query, setQuery] = useState("");
     const [conversations, setConversations] = useState([]);
@@ -58,16 +79,27 @@ function Consultant({ initialData }) {
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [showExportDialog, setShowExportDialog] = useState(false);
     const router = useRouter();
+    const theme = useTheme();
+    const { showToast } = useToast();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const [responseTime, setResponseTime] = useState(0);
+    const [showTemplates, setShowTemplates] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
     useEffect(() => {
         const checkSession = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                router.push(`/auth?redirectTo=/consultant`);
-            } else {
-                setUser(user);
-                // Load user's conversations
-                loadConversations(user.id);
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    router.push(`/auth?redirectTo=/consultant`);
+                } else {
+                    setUser(user);
+                    await loadConversations(user.id);
+                }
+            } catch (error) {
+                showToast('Error checking session', 'error');
+            } finally {
+                setIsLoadingHistory(false);
             }
         };
         checkSession();
@@ -79,82 +111,102 @@ function Consultant({ initialData }) {
                 .from('conversations')
                 .select('*')
                 .eq('user_id', userId)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: true });
 
             if (error) throw error;
             setConversations(data || []);
         } catch (error) {
-            console.error("Error loading conversations:", error);
+            showToast('Error loading conversations', 'error');
+        }
+    };
+
+    // Add this function to handle keypress
+    const handleKeyPress = (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            handleGetAnswer();
         }
     };
 
     const handleGetAnswer = async () => {
-        if (!query.trim()) return;
+        if (!query.trim() || loading) return;
         
         setLoading(true);
         setError(null);
         
-        const formData = new FormData();
-        formData.append("query", query);
-        formData.append("thread_id", currentConversation?.id || "default");
-        if (user?.id) {
-            formData.append("user_id", user.id);
-        }
-        if (file) {
-            formData.append("file", file);
-        }
-
+        const startTime = Date.now();
+        const userMessage = {
+            type: 'message',
+            content: query,
+            timestamp: new Date().toISOString(),
+            role: 'user'
+        };
+        
         try {
+            // Optimistic update
+            const updatedConversation = currentConversation ? {
+                ...currentConversation,
+                messages: [...currentConversation.messages, userMessage]
+            } : {
+                id: Date.now().toString(),
+                title: query.substring(0, 50) + "...",
+                messages: [userMessage],
+                created_at: new Date().toISOString(),
+                user_id: user.id
+            };
+
+            setCurrentConversation(updatedConversation);
+            if (!currentConversation) {
+                setConversations(prev => [updatedConversation, ...prev]);
+            }
+
+            const formData = new FormData();
+            formData.append("query", query);
+            formData.append("thread_id", updatedConversation.id);
+            if (user?.id) {
+                formData.append("user_id", user.id);
+            }
+            if (file) {
+                formData.append("file", file);
+            }
+
             const response = await axios.post("http://127.0.0.1:5000/get_answer", formData, {
-                headers: {
-                    "Content-Type": "multipart/form-data",
-                },
+                headers: { "Content-Type": "multipart/form-data" },
             });
 
-            const newMessage = {
+            const endTime = Date.now();
+            setResponseTime((endTime - startTime) / 1000);
+
+            const assistantMessage = {
                 type: 'message',
                 content: response.data.answer,
                 timestamp: new Date().toISOString(),
                 role: 'assistant'
             };
 
-            if (currentConversation) {
-                // Update existing conversation
-                const updatedConversation = {
-                    ...currentConversation,
-                    messages: [...currentConversation.messages, newMessage]
-                };
-                setCurrentConversation(updatedConversation);
-                // Update in Supabase
-                await updateConversationInSupabase(updatedConversation);
-            } else {
-                // Create new conversation
-                const newConversation = {
-                    id: Date.now().toString(),
-                    title: query.substring(0, 50) + "...",
-                    messages: [
-                        {
-                            type: 'message',
-                            content: query,
-                            timestamp: new Date().toISOString(),
-                            role: 'user'
-                        },
-                        newMessage
-                    ],
-                    created_at: new Date().toISOString(),
-                    user_id: user.id
-                };
-                setCurrentConversation(newConversation);
-                setConversations([newConversation, ...conversations]);
-                // Save to Supabase
-                await saveConversationToSupabase(newConversation);
-            }
+            const finalConversation = {
+                ...updatedConversation,
+                messages: [...updatedConversation.messages, assistantMessage]
+            };
 
+            setCurrentConversation(finalConversation);
+            await saveConversationToSupabase(finalConversation);
+            
+            showToast('Response received successfully', 'success');
             setQuery("");
             setFile(null);
         } catch (error) {
             console.error("Error getting answer:", error);
-            setError("Failed to get an answer. Please try again.");
+            setError(error.response?.data?.error || "Failed to get an answer. Please try again.");
+            showToast('Error getting answer', 'error');
+            
+            // Revert optimistic update
+            if (currentConversation) {
+                setCurrentConversation(prev => ({
+                    ...prev,
+                    messages: prev.messages.slice(0, -1)
+                }));
+            }
         } finally {
             setLoading(false);
         }
@@ -201,6 +253,41 @@ function Consultant({ initialData }) {
         setShowExportDialog(false);
     };
 
+    const formatResponse = (text) => {
+        // Split response into sections based on common patterns
+        const sections = text.split(/(?=\n[A-Z][A-Za-z\s]*:|\n\d+\.|\n•)/g);
+        return sections.map((section, index) => {
+            const trimmedSection = section.trim();
+            if (!trimmedSection) return null;
+
+            // Check if section starts with a bullet point or number
+            const isList = /^(\d+\.|\•|\-)\s/.test(trimmedSection);
+            // Check if section is a heading
+            const isHeading = /^[A-Z][A-Za-z\s]*:/.test(trimmedSection);
+
+            return (
+                <Box key={index} mb={2}>
+                    {isHeading ? (
+                        <Typography variant="h6" gutterBottom sx={{ color: '#1a1a1a', fontWeight: 600 }}>
+                            {trimmedSection}
+                        </Typography>
+                    ) : (
+                        <Typography
+                            variant="body1"
+                            component={isList ? 'li' : 'p'}
+                            sx={{
+                                marginLeft: isList ? 2 : 0,
+                                listStyleType: isList ? 'inherit' : 'none'
+                            }}
+                        >
+                            {trimmedSection}
+                        </Typography>
+                    )}
+                </Box>
+            );
+        });
+    };
+
     if (!user) return (
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
             <CircularProgress />
@@ -211,172 +298,265 @@ function Consultant({ initialData }) {
         <div className="consultant">
             <Sidebar />
             <div className="main-content">
-                <Navbar />
-                
-                {/* Quick Actions */}
-                <Box mb={4} mt={3}>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} md={4}>
-                            <Card className="quick-action-card">
-                                <Typography variant="h6">Active Conversations</Typography>
-                                <Typography variant="h3">{conversations.length}</Typography>
+                {/* Dashboard Stats */}
+                <Box mb={4}>
+                    <Grid container spacing={3}>
+                        <Grid item xs={12} md={3}>
+                            <Card className="stat-card">
+                                <Box p={3}>
+                                    <Typography variant="overline" color="textSecondary">
+                                        Active Conversations
+                                    </Typography>
+                                    <Typography variant="h3" component="div" sx={{ mt: 1 }}>
+                                        {conversations.length}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                        {conversations.length > 0 ? 
+                                            `Last updated ${new Date(conversations[0].created_at).toLocaleDateString()}` :
+                                            'No conversations yet'}
+                                    </Typography>
+                                </Box>
                             </Card>
                         </Grid>
-                        <Grid item xs={12} md={4}>
-                            <Card className="quick-action-card">
-                                <Typography variant="h6">Files Analyzed</Typography>
-                                <Typography variant="h3">{conversations.reduce((acc, conv) => 
-                                    acc + (conv.messages.filter(m => m.type === 'file').length), 0)}</Typography>
+                        <Grid item xs={12} md={3}>
+                            <Card className="stat-card">
+                                <Box p={3}>
+                                    <Typography variant="overline" color="textSecondary">
+                                        Total Messages
+                                    </Typography>
+                                    <Typography variant="h3" component="div" sx={{ mt: 1 }}>
+                                        {conversations.reduce((acc, conv) => acc + conv.messages.length, 0)}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                        Across all conversations
+                                    </Typography>
+                                </Box>
                             </Card>
                         </Grid>
-                        <Grid item xs={12} md={4}>
-                            <Card className="quick-action-card">
-                                <Typography variant="h6">Total Interactions</Typography>
-                                <Typography variant="h3">{conversations.reduce((acc, conv) => 
-                                    acc + conv.messages.length, 0)}</Typography>
+                        <Grid item xs={12} md={3}>
+                            <Card className="stat-card">
+                                <Box p={3}>
+                                    <Typography variant="overline" color="textSecondary">
+                                        Response Time
+                                    </Typography>
+                                    <Typography variant="h3" component="div" sx={{ mt: 1 }}>
+                                        {responseTime.toFixed(1)}s
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                        Last response
+                                    </Typography>
+                                </Box>
+                            </Card>
+                        </Grid>
+                        <Grid item xs={12} md={3}>
+                            <Card className="stat-card" onClick={() => setShowTemplates(true)} sx={{ cursor: 'pointer' }}>
+                                <Box p={3}>
+                                    <Typography variant="overline" color="textSecondary">
+                                        Templates
+                                    </Typography>
+                                    <Typography variant="h3" component="div" sx={{ mt: 1 }}>
+                                        {Object.keys(QUERY_TEMPLATES).length}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                        Click to view
+                                    </Typography>
+                                </Box>
                             </Card>
                         </Grid>
                     </Grid>
                 </Box>
 
-                {/* Query Section */}
-                <div className="query-section">
-                    <Box mb={2} display="flex" gap={1}>
-                        <Button
-                            variant="outlined"
-                            onClick={handleTemplateClick}
-                            className="template-button"
-                        >
-                            Use Template
-                        </Button>
+                {/* Chat Interface */}
+                <Paper elevation={0} className="chat-container">
+                    {/* Messages Area */}
+                    <Box className="messages-container">
+                        {currentConversation?.messages.map((message, index) => (
+                            <Box
+                                key={index}
+                                className={`message ${message.role}`}
+                                sx={{
+                                    maxWidth: '80%',
+                                    alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
+                                    opacity: loading && index === currentConversation.messages.length - 1 ? 0.7 : 1
+                                }}
+                            >
+                                <Paper 
+                                    elevation={1} 
+                                    sx={{ 
+                                        p: 2,
+                                        backgroundColor: message.role === 'user' ? 
+                                            theme.palette.primary.main : 
+                                            theme.palette.background.paper,
+                                        borderRadius: message.role === 'user' ? 
+                                            '12px 12px 0 12px' : 
+                                            '12px 12px 12px 0'
+                                    }}
+                                >
+                                    {message.role === 'user' ? (
+                                        <Typography sx={{ color: theme.palette.primary.contrastText }}>
+                                            {message.content}
+                                        </Typography>
+                                    ) : (
+                                        <Box sx={{ color: theme.palette.text.primary }}>
+                                            {formatResponse(message.content)}
+                                        </Box>
+                                    )}
+                                    <Typography 
+                                        variant="caption" 
+                                        sx={{ 
+                                            display: 'block',
+                                            mt: 1,
+                                            color: message.role === 'user' ? 
+                                                'rgba(255,255,255,0.7)' : 
+                                                theme.palette.text.secondary
+                                        }}
+                                    >
+                                        {new Date(message.timestamp).toLocaleTimeString()}
+                                    </Typography>
+                                </Paper>
+                            </Box>
+                        ))}
+                        {loading && (
+                            <Box display="flex" justifyContent="center" alignItems="center" my={2}>
+                                <CircularProgress size={24} />
+                                <Typography variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>
+                                    Generating response...
+                                </Typography>
+                            </Box>
+                        )}
+                        {error && (
+                            <Box 
+                                sx={{ 
+                                    p: 2, 
+                                    bgcolor: theme.palette.error.light,
+                                    borderRadius: 1,
+                                    color: theme.palette.error.contrastText,
+                                    mt: 2
+                                }}
+                            >
+                                <Typography variant="body2">{error}</Typography>
+                            </Box>
+                        )}
+                    </Box>
+
+                    {/* Input Area */}
+                    <Box className="input-area">
                         {file && (
                             <Chip
                                 label={file.name}
                                 onDelete={() => setFile(null)}
-                                className="file-chip"
+                                sx={{ mb: 1 }}
+                                color="primary"
+                                variant="outlined"
                             />
                         )}
-                    </Box>
-                    
-                    <div className="input-container">
-                        <textarea
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Ask me anything about your business..."
-                            className="query-input"
-                            rows={3}
-                        />
-                        <div className="action-buttons">
+                        <Box display="flex" gap={1}>
                             <input
                                 type="file"
                                 id="file-upload"
-                                accept=".docx,.pdf,.xls,.xlsx,.ppt,.pptx"
                                 onChange={handleFileChange}
+                                accept=".pdf,.doc,.docx,.txt,.csv"
                                 style={{ display: 'none' }}
                             />
-                            <label htmlFor="file-upload">
-                                <Button
-                                    component="span"
-                                    variant="outlined"
-                                    className="upload-button"
-                                >
-                                    Attach File
-                                </Button>
-                            </label>
-                            <Button
-                                onClick={handleGetAnswer}
-                                variant="contained"
-                                disabled={loading || !query.trim()}
-                                className="submit-button"
-                            >
-                                {loading ? <CircularProgress size={24} /> : "Ask Question"}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Conversation Display */}
-                <div className="conversation-section">
-                    {error && (
-                        <Box mb={2}>
-                            <Typography color="error">{error}</Typography>
+                            <Tooltip title="Attach file">
+                                <label htmlFor="file-upload">
+                                    <IconButton 
+                                        component="span" 
+                                        color="primary"
+                                        sx={{
+                                            '&:hover': {
+                                                backgroundColor: theme.palette.primary.light + '1A'
+                                            }
+                                        }}
+                                    >
+                                        <AttachFile />
+                                    </IconButton>
+                                </label>
+                            </Tooltip>
+                            <TextField
+                                fullWidth
+                                multiline
+                                maxRows={4}
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                placeholder="Ask your business question... (Press Enter to send)"
+                                variant="outlined"
+                                sx={{
+                                    '& .MuiOutlinedInput-root': {
+                                        backgroundColor: theme.palette.background.paper,
+                                        '&:hover': {
+                                            '& > fieldset': {
+                                                borderColor: theme.palette.primary.main
+                                            }
+                                        }
+                                    }
+                                }}
+                            />
+                            <Tooltip title="Send message">
+                                <span>
+                                    <Button
+                                        variant="contained"
+                                        onClick={handleGetAnswer}
+                                        disabled={loading || !query.trim()}
+                                        sx={{
+                                            minWidth: '56px',
+                                            width: '56px',
+                                            height: '56px',
+                                            borderRadius: '8px'
+                                        }}
+                                    >
+                                        <Send />
+                                    </Button>
+                                </span>
+                            </Tooltip>
                         </Box>
-                    )}
-                    
-                    {currentConversation?.messages.map((message, index) => (
-                        <Box
-                            key={index}
-                            className={`message ${message.role}`}
-                            mb={2}
-                        >
-                            <Typography variant="body1">
-                                {message.content}
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary">
-                                {new Date(message.timestamp).toLocaleTimeString()}
-                            </Typography>
-                        </Box>
-                    ))}
-                </div>
+                    </Box>
+                </Paper>
 
-                {/* Template Menu */}
-                <Menu
-                    anchorEl={templateMenuAnchor}
-                    open={Boolean(templateMenuAnchor)}
-                    onClose={() => setTemplateMenuAnchor(null)}
-                >
-                    {Object.keys(QUERY_TEMPLATES).map((category) => (
-                        <MenuItem
-                            key={category}
-                            onClick={() => handleCategorySelect(category)}
-                        >
-                            {category}
-                        </MenuItem>
-                    ))}
-                </Menu>
-
-                {/* Template Selection Dialog */}
+                {/* Templates Dialog */}
                 <Dialog
-                    open={Boolean(selectedCategory)}
-                    onClose={() => setSelectedCategory(null)}
-                    maxWidth="sm"
+                    open={showTemplates}
+                    onClose={() => setShowTemplates(false)}
+                    maxWidth="md"
                     fullWidth
                 >
-                    <DialogTitle>{selectedCategory}</DialogTitle>
-                    <DialogContent>
-                        {selectedCategory && QUERY_TEMPLATES[selectedCategory].map((template, index) => (
-                            <Button
-                                key={index}
-                                fullWidth
-                                variant="outlined"
-                                onClick={() => handleTemplateSelect(template)}
-                                sx={{ mb: 1 }}
-                            >
-                                {template}
-                            </Button>
-                        ))}
-                    </DialogContent>
-                </Dialog>
-
-                {/* Export Dialog */}
-                <Dialog
-                    open={showExportDialog}
-                    onClose={() => setShowExportDialog(false)}
-                >
-                    <DialogTitle>Export Conversation</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            Download this conversation as a text file?
+                    <DialogTitle>
+                        <Typography variant="h6">Query Templates</Typography>
+                        <Typography variant="body2" color="textSecondary">
+                            Select a template to quickly start a conversation
                         </Typography>
+                    </DialogTitle>
+                    <DialogContent>
+                        <Grid container spacing={2}>
+                            {Object.entries(QUERY_TEMPLATES).map(([category, templates]) => (
+                                <Grid item xs={12} md={6} key={category}>
+                                    <Card sx={{ height: '100%' }}>
+                                        <Box p={2}>
+                                            <Typography variant="h6" gutterBottom>
+                                                {category}
+                                            </Typography>
+                                            <Divider sx={{ mb: 2 }} />
+                                            {templates.map((template, index) => (
+                                                <Button
+                                                    key={index}
+                                                    fullWidth
+                                                    variant="outlined"
+                                                    onClick={() => {
+                                                        setQuery(template);
+                                                        setShowTemplates(false);
+                                                    }}
+                                                    sx={{ mb: 1 }}
+                                                >
+                                                    {template}
+                                                </Button>
+                                            ))}
+                                        </Box>
+                                    </Card>
+                                </Grid>
+                            ))}
+                        </Grid>
                     </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setShowExportDialog(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleExport} variant="contained">
-                            Export
-                        </Button>
-                    </DialogActions>
                 </Dialog>
             </div>
 
@@ -384,109 +564,97 @@ function Consultant({ initialData }) {
                 .consultant {
                     display: flex;
                     min-height: 100vh;
-                    background: #f8f9fa;
+                    background: ${theme.palette.background.default};
                 }
 
                 .main-content {
                     flex-grow: 1;
-                    padding: 24px;
+                    padding: ${isMobile ? '16px' : '24px'};
                     overflow-y: auto;
                 }
 
-                .quick-action-card {
-                    padding: 24px;
-                    text-align: center;
+                .stat-card {
                     height: 100%;
-                    transition: transform 0.2s ease;
+                    transition: all 0.3s ease;
+                    cursor: pointer;
                 }
 
-                .quick-action-card:hover {
-                    transform: translateY(-2px);
+                .stat-card:hover {
+                    transform: translateY(-4px);
+                    box-shadow: ${theme.shadows[4]};
                 }
 
-                .input-container {
-                    background: white;
-                    border-radius: 12px;
-                    padding: 16px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                }
-
-                .query-input {
-                    width: 100%;
-                    padding: 12px;
-                    font-size: 16px;
-                    border: 1px solid #e0e0e0;
-                    border-radius: 8px;
-                    resize: vertical;
-                    min-height: 60px;
-                    margin-bottom: 16px;
-                }
-
-                .query-input:focus {
-                    outline: none;
-                    border-color: #1a1a1a;
-                }
-
-                .action-buttons {
+                .chat-container {
                     display: flex;
-                    justify-content: flex-end;
-                    gap: 12px;
+                    flex-direction: column;
+                    height: calc(100vh - 300px);
+                    background: ${theme.palette.background.default};
+                    border: 1px solid ${theme.palette.divider};
+                    border-radius: 12px;
+                    overflow: hidden;
                 }
 
-                .upload-button {
-                    color: #1a1a1a;
-                    border-color: #1a1a1a;
+                .messages-container {
+                    flex-grow: 1;
+                    overflow-y: auto;
+                    padding: 24px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                    scroll-behavior: smooth;
                 }
 
-                .submit-button {
-                    background: #1a1a1a;
-                    color: white;
-                    min-width: 140px;
+                .messages-container::-webkit-scrollbar {
+                    width: 8px;
                 }
 
-                .submit-button:hover {
-                    background: #333;
+                .messages-container::-webkit-scrollbar-track {
+                    background: ${theme.palette.background.default};
                 }
 
-                .conversation-section {
-                    margin-top: 32px;
+                .messages-container::-webkit-scrollbar-thumb {
+                    background: ${theme.palette.grey[400]};
+                    border-radius: 4px;
+                }
+
+                .messages-container::-webkit-scrollbar-thumb:hover {
+                    background: ${theme.palette.grey[600]};
+                }
+
+                .input-area {
+                    padding: 16px;
+                    background: ${theme.palette.background.paper};
+                    border-top: 1px solid ${theme.palette.divider};
                 }
 
                 .message {
-                    padding: 16px;
-                    border-radius: 12px;
-                    margin-bottom: 16px;
+                    display: flex;
+                    flex-direction: column;
+                    animation: fadeIn 0.3s ease;
                 }
 
-                .message.user {
-                    background: #f0f0f0;
-                    margin-left: auto;
-                    max-width: 80%;
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
 
-                .message.assistant {
-                    background: white;
-                    margin-right: auto;
-                    max-width: 80%;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                }
+                @media (max-width: 600px) {
+                    .chat-container {
+                        height: calc(100vh - 250px);
+                    }
 
-                .template-button {
-                    color: #1a1a1a;
-                    border-color: #1a1a1a;
-                }
-
-                .file-chip {
-                    background: #f0f0f0;
-                }
-
-                @media (max-width: 768px) {
-                    .main-content {
+                    .messages-container {
                         padding: 16px;
                     }
 
-                    .message {
-                        max-width: 100%;
+                    .input-area {
+                        padding: 12px;
                     }
                 }
             `}</style>

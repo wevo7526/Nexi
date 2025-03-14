@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Import the Sidebar component
-import Navbar from "../components/Navbar"; // Import the Navbar component
 import { CircularProgress, Box, Typography } from "@mui/material";
 
 function MultiAgentConsultant({ initialData }) {
@@ -103,9 +102,6 @@ function MultiAgentConsultant({ initialData }) {
 
     return (
         <div className="multi-agent-consultant">
-            <div className="navbar-container">
-                <Navbar /> {/* Render the Navbar component */}
-            </div>
             <div className="content">
                 <Sidebar /> {/* Render the Sidebar component */}
                 <div className="main-content">
@@ -130,11 +126,6 @@ function MultiAgentConsultant({ initialData }) {
                     flex-direction: column;
                     min-height: 100vh;
                     font-family: "Arial", sans-serif;
-                }
-                .navbar-container {
-                    display: flex;
-                    justify-content: center; /* Center the Navbar horizontally */
-                    padding: 0 250px; /* Add padding to the sides */
                 }
                 .content {
                     display: flex;

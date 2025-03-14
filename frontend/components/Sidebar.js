@@ -15,6 +15,9 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import HistoryIcon from '@mui/icons-material/History';
 import FolderIcon from '@mui/icons-material/Folder'; // Icon for Documents
 import SearchIcon from '@mui/icons-material/Search'; // Icon for Research
+import BusinessIcon from '@mui/icons-material/Business';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import GroupsIcon from '@mui/icons-material/Groups';
 import { useRouter } from 'next/router'; // Import useRouter from Next.js
 
 const drawerWidth = 240;
@@ -32,11 +35,17 @@ const Drawer = styled(MuiDrawer)({
 export default function SideMenu() {
   const router = useRouter(); // Initialize the router
 
-  const menuItems = [
+  const mainMenuItems = [
     { text: 'Knowledge', icon: <BookIcon fontSize="small" />, path: '/knowledge' },
     { text: 'Reports', icon: <AssessmentIcon fontSize="small" />, path: '/reports' },
     { text: 'Documents', icon: <FolderIcon fontSize="small" />, path: '/documents' }, // New Documents Tab
     { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/research' }, // New Research Tab
+  ];
+
+  const featureMenuItems = [
+    { text: 'Consultant', icon: <BusinessIcon fontSize="small" />, path: '/consultant' },
+    { text: 'Wealth Manager', icon: <AccountBalanceIcon fontSize="small" />, path: '/wealthmanager' },
+    { text: 'Team', icon: <GroupsIcon fontSize="small" />, path: '/multiagent' },
   ];
 
   const handleNavigation = (path) => {
@@ -72,23 +81,25 @@ export default function SideMenu() {
         />
       </Box>
 
-      <Divider />
+      <Divider sx={{ my: 2 }} />
 
       {/* Main Menu Section */}
       <Box
         sx={{
-          overflow: 'auto',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
+          flex: 1,
           px: 2,
           py: 1,
         }}
       >
         <List>
           {/* Render each menu item dynamically */}
-          {menuItems.map((item) => (
-            <ListItem button key={item.text} onClick={() => handleNavigation(item.path)}>
+          {mainMenuItems.map((item) => (
+            <ListItem 
+              button 
+              key={item.text} 
+              onClick={() => handleNavigation(item.path)}
+              selected={router.pathname === item.path}
+            >
               <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
               <ListItemText
                 primary={item.text}
@@ -104,16 +115,39 @@ export default function SideMenu() {
 
       <Divider />
 
-      {/* Keep History at the Bottom */}
-      <Box
-        sx={{
-          mt: "auto",
-          px: 2,
-          py: 1,
-        }}
-      >
+      {/* Features Section (Former Navbar Items) */}
+      <Box sx={{ px: 2, py: 1 }}>
         <List>
-          <ListItem button onClick={() => handleNavigation('/history')}>
+          {featureMenuItems.map((item) => (
+            <ListItem 
+              button 
+              key={item.text} 
+              onClick={() => handleNavigation(item.path)}
+              selected={router.pathname === item.path}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
+                  fontSize: '0.875rem',
+                  fontFamily: 'Roboto, sans-serif',
+                }}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </Box>
+
+      <Divider />
+
+      {/* History Section */}
+      <Box sx={{ px: 2, py: 1 }}>
+        <List>
+          <ListItem 
+            button 
+            onClick={() => handleNavigation('/history')}
+            selected={router.pathname === '/history'}
+          >
             <ListItemIcon sx={{ minWidth: 36 }}>
               <HistoryIcon fontSize="small" />
             </ListItemIcon>
@@ -128,6 +162,8 @@ export default function SideMenu() {
         </List>
       </Box>
 
+      <Divider />
+
       {/* Bottom Section for Account */}
       <Stack
         direction="row"
@@ -137,6 +173,7 @@ export default function SideMenu() {
           alignItems: 'center',
           borderTop: '1px solid',
           borderColor: 'divider',
+          mt: 'auto',
         }}
       >
         <Avatar

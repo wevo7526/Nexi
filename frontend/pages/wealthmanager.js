@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Assuming Sidebar exists for navigation
 import VisualDashboard from "../components/VisualDashboard"; // For rendering charts and graphs
-import Navbar from "../components/Navbar"; // Importing Navbar component
 
 function WealthManager({ initialData }) {
     const [query, setQuery] = useState("");
@@ -49,9 +48,6 @@ function WealthManager({ initialData }) {
 
     return (
         <div className="wealth-manager">
-            <div className="navbar-container">
-                    <Navbar />
-            </div>
             <div className="content">
                 <Sidebar />
                 <div className="main-content">
@@ -182,15 +178,6 @@ function WealthManager({ initialData }) {
     min-height: 100vh;
     background-color: var(--background);
     font-family: "Geist", sans-serif;
-  }
-  .navbar-container {
-    display: flex;
-    align-items: center;
-    padding: 10px;
-    background-color: #fff;
-    border-bottom: 1px solid #ddd;
-    position: relative; /* Enables positioning adjustments */
-    left: 15%; /* Moves the navbar 80% across the container's width */
   }
   .content {
     display: flex;
