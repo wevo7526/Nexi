@@ -2,6 +2,19 @@ import sys
 import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Print current working directory and .env file location
+print(f"Current working directory: {os.getcwd()}")
+print(f".env file exists: {os.path.exists(os.path.join(os.getcwd(), '.env'))}")
+
+# Load environment variables
+load_dotenv()
+
+# Print environment variables for debugging
+print(f"SUPABASE_URL: {os.getenv('SUPABASE_URL')}")
+print(f"SUPABASE_KEY exists: {'Yes' if os.getenv('SUPABASE_KEY') else 'No'}")
+print(f"ANTHROPIC_API_KEY exists: {'Yes' if os.getenv('ANTHROPIC_API_KEY') else 'No'}")
 
 # Add the project directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -9,10 +22,20 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.agent_model import ConsultantAgent
 from models.wealth_manager_agent import WealthManagerAgent
 from models.multi_agent_model import MultiAgentConsultant
+from reports import reports_bp
 
 # Initialize Flask app and enable CORS
 app = Flask(__name__)
 CORS(app)
+
+# Verify environment variables
+required_env_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'ANTHROPIC_API_KEY']
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
+# Register the reports blueprint
+app.register_blueprint(reports_bp)
 
 # Initialize agents
 consultant_agent = ConsultantAgent()

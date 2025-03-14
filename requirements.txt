@@ -5,6 +5,12 @@ langgraph
 ipykernel
 beautifulsoup4
 langchain_anthropic
-flask
-flask_cors
+flask==3.0.2
+flask-cors==4.0.0
 google-search-results
+anthropic==0.18.1
+supabase==2.3.4
+python-dotenv==1.0.1
+requests==2.31.0
+aiohttp==3.9.3
+asyncio==3.4.3

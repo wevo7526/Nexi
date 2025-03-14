@@ -8,10 +8,12 @@ import { useRouter } from 'next/router';
 const NavbarContainer = styled(Box)(({ theme }) => ({
   width: '100%',
   backgroundColor: theme.palette.background.default,
-  padding: '16px 24px',
+  padding: '16px 32px',
   display: 'flex',
-  justifyContent: 'left',
-  alignItems: 'left',
+  justifyContent: 'flex-start',
+  alignItems: 'center',
+  borderBottom: '1px solid',
+  borderColor: theme.palette.divider,
 }));
 
 const NavbarItem = styled(Typography)(({ theme }) => ({
@@ -21,8 +23,11 @@ const NavbarItem = styled(Typography)(({ theme }) => ({
   cursor: 'pointer',
   padding: '8px 16px',
   borderRadius: '4px',
+  color: theme.palette.text.primary,
+  transition: 'all 0.2s ease',
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
+    transform: 'translateY(-1px)',
   },
 }));
 
