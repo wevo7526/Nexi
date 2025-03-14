@@ -76,48 +76,6 @@ function WealthManager({ initialData }) {
                             <p className="error-message">{error}</p>
                         ) : answer ? (
                             <>
-                                <h3>Raw AI Response</h3>
-                                <pre className="raw-response">
-                                    {answer.raw_response || "No raw response available."}
-                                </pre>
-
-                                {/* Financial Status Table */}
-                                <h3>Current Financial Status</h3>
-                                <table className="output-table">
-                                    <tbody>
-                                        <tr>
-                                            <td>Net Worth</td>
-                                            <td>{answer.current_status?.net_worth || "Data not available"}</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Cash Flow</td>
-                                            <td>{answer.current_status?.cash_flow || "Data not available"}</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Risk Level</td>
-                                            <td>{answer.current_status?.risk_level || "Data not available"}</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Retirement Goal Status</td>
-                                            <td>{answer.current_status?.retirement_goal_status || "Data not available"}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-
-                                {/* Recommendations Section */}
-                                <h3>Recommendations</h3>
-                                {answer.recommendations?.length ? (
-                                    <ul className="recommendations">
-                                        {answer.recommendations.map((rec, index) => (
-                                            <li key={index}>
-                                                <strong>{rec.type}:</strong> {rec.details}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <p>No recommendations available.</p>
-                                )}
-
                                 {/* Portfolio Insights */}
                                 <h3>Portfolio Insights</h3>
                                 {answer.visual_data?.portfolio_performance?.length > 0 ||
@@ -127,43 +85,6 @@ function WealthManager({ initialData }) {
                                 ) : (
                                     <p>No portfolio insights to display.</p>
                                 )}
-
-                                {/* Educational Tips */}
-                                <h3>Educational Tips</h3>
-                                {answer.educational_tips?.length ? (
-                                    <ul className="educational-tips">
-                                        {answer.educational_tips.map((tip, index) => (
-                                            <li key={index}>
-                                                <strong>{tip.title}:</strong> {tip.content}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <p>No educational tips available.</p>
-                                )}
-
-                                {/* Multi-Scenario Analysis */}
-                                <h3>Multi-Scenario Analysis</h3>
-                                {answer.multi_scenario_analysis?.length ? (
-                                    <table className="output-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Scenario</th>
-                                                <th>Outcome</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {answer.multi_scenario_analysis.map((scenario, index) => (
-                                                <tr key={index}>
-                                                    <td>{scenario.scenario}</td>
-                                                    <td>{scenario.outcome}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                ) : (
-                                    <p>No scenario analysis available.</p>
-                                )}
                             </>
                         ) : (
                             <p>No data available. Submit a query to get started.</p>
@@ -172,23 +93,23 @@ function WealthManager({ initialData }) {
                 </div>
             </div>
             <style jsx>{`
-  .wealth-manager {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    background-color: var(--background);
-    font-family: "Geist", sans-serif;
-  }
-  .content {
-    display: flex;
-    flex-direction: row;
-    flex-grow: 1;
-  }
-  .main-content {
-    flex-grow: 1;
-    padding: 20px;
-    background-color: var(--content-background);
-  }
+                .wealth-manager {
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 100vh;
+                    background-color: var(--background);
+                    font-family: "Geist", sans-serif;
+                }
+                .content {
+                    display: flex;
+                    flex-direction: row;
+                    flex-grow: 1;
+                }
+                .main-content {
+                    flex-grow: 1;
+                    padding: 20px;
+                    background-color: var(--content-background);
+                }
                 .query-section {
                     display: flex;
                     align-items: center;
@@ -224,45 +145,9 @@ function WealthManager({ initialData }) {
                     border-radius: 4px;
                     min-height: 300px;
                 }
-                .raw-response {
-                    background: #f4f4f4;
-                    border: 1px solid #ddd;
-                    padding: 10px;
-                    white-space: pre-wrap;
-                    overflow-x: auto;
-                }
                 .error-message {
                     color: red;
                     margin-top: 10px;
-                }
-                .output-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-bottom: 20px;
-                }
-                .output-table th,
-                .output-table td {
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                }
-                .output-table th {
-                    background-color: #f4f4f4;
-                }
-                .recommendations {
-                    margin: 20px 0;
-                    padding: 0;
-                    list-style-type: none;
-                }
-                .recommendations li {
-                    margin-bottom: 10px;
-                }
-                .educational-tips {
-                    margin: 20px 0;
-                    padding: 0;
-                    list-style-type: none;
-                }
-                .educational-tips li {
-                    margin-bottom: 10px;
                 }
             `}</style>
         </div>
