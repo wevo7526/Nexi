@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
 import Head from 'next/head';
+import AuthHandler from '../utils/authHandler';
 
 export default function Auth() {
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isSignUp, setIsSignUp] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState({ type: '', content: '' });
     const router = useRouter();
@@ -15,6 +18,66 @@ export default function Auth() {
 
     const validateEmail = (email) => {
         return email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+    };
+
+    const handleSignUp = async (e) => {
+        e.preventDefault();
+        setMessage({ type: '', content: '' });
+
+        if (!email) {
+            setMessage({ type: 'error', content: 'Please enter your email address.' });
+            return;
+        }
+
+        if (!validateEmail(email)) {
+            setMessage({ type: 'error', content: 'Please enter a valid email address.' });
+            return;
+        }
+
+        if (!password || password.length < 6) {
+            setMessage({ type: 'error', content: 'Password must be at least 6 characters.' });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/auth-redirect?redirectTo=${encodeURIComponent(redirectTo || '/consultant')}`,
+                }
+            });
+
+            if (error) throw error;
+
+            if (!data?.user) {
+                throw new Error('No user data received');
+            }
+
+            setMessage({
+                type: 'success',
+                content: 'Account created successfully! Please check your email to verify your account.'
+            });
+
+            // Reset form
+            setEmail('');
+            setPassword('');
+
+            // Redirect to consultant page after successful signup
+            setTimeout(() => {
+                router.push('/consultant');
+            }, 2000);
+
+        } catch (err) {
+            console.error('Sign up error:', err);
+            setMessage({
+                type: 'error',
+                content: err.message || 'An error occurred during sign up. Please try again.'
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleMagicLinkSignIn = async (e) => {
@@ -80,10 +143,14 @@ export default function Auth() {
 
                     <div className="right-panel">
                         <div className="auth-card">
-                            <h1>Sign In</h1>
-                            <p className="subtitle">Enter your email to receive a secure magic link</p>
+                            <h1>{isSignUp ? 'Create Account' : 'Sign In'}</h1>
+                            <p className="subtitle">
+                                {isSignUp 
+                                    ? 'Create your account to get started' 
+                                    : 'Enter your email to receive a secure magic link'}
+                            </p>
 
-                            <form onSubmit={handleMagicLinkSignIn} className="auth-form">
+                            <form onSubmit={isSignUp ? handleSignUp : handleMagicLinkSignIn} className="auth-form">
                                 <div className="form-group">
                                     <label htmlFor="email">Email address</label>
                                     <input
@@ -99,6 +166,22 @@ export default function Auth() {
                                     />
                                 </div>
 
+                                {isSignUp && (
+                                    <div className="form-group">
+                                        <label htmlFor="password">Password</label>
+                                        <input
+                                            id="password"
+                                            type="password"
+                                            placeholder="••••••••"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            disabled={isLoading}
+                                            className="password-input"
+                                            autoComplete="new-password"
+                                        />
+                                    </div>
+                                )}
+
                                 {message.content && (
                                     <div className={`message ${message.type}`}>
                                         <span className="message-icon">
@@ -109,28 +192,47 @@ export default function Auth() {
                                 )}
 
                                 <button 
-                                    type="submit" 
-                                    className={`sign-in-button ${isLoading ? 'loading' : ''}`}
+                                    type="submit"
                                     disabled={isLoading}
+                                    className="submit-button"
                                 >
                                     {isLoading ? (
-                                        <>
-                                            <span className="loading-spinner"></span>
-                                            Sending link...
-                                        </>
+                                        <span>
+                                            {isSignUp ? 'Creating account...' : 'Sending link...'}
+                                        </span>
                                     ) : (
-                                        'Continue with Email'
+                                        <span>
+                                            {isSignUp ? 'Create Account' : 'Send Magic Link'}
+                                        </span>
                                     )}
                                 </button>
                             </form>
 
-                            <div className="divider">
-                                <span>Protected by AI</span>
+                            <div className="auth-footer">
+                                <p>
+                                    {isSignUp ? (
+                                        <>
+                                            Already have an account?{' '}
+                                            <button
+                                                onClick={() => setIsSignUp(false)}
+                                                className="toggle-auth-mode"
+                                            >
+                                                Sign in
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            Don't have an account?{' '}
+                                            <button
+                                                onClick={() => setIsSignUp(true)}
+                                                className="toggle-auth-mode"
+                                            >
+                                                Create one
+                                            </button>
+                                        </>
+                                    )}
+                                </p>
                             </div>
-
-                            <p className="help-text">
-                                By continuing, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
-                            </p>
                         </div>
                     </div>
                 </div>
@@ -235,7 +337,34 @@ export default function Auth() {
                     cursor: not-allowed;
                 }
 
-                .sign-in-button {
+                .password-input {
+                    width: 100%;
+                    padding: 1rem;
+                    border: none;
+                    border-radius: 12px;
+                    font-size: 1rem;
+                    transition: all 0.2s ease;
+                    background: #333;
+                    color: white;
+                    box-sizing: border-box;
+                    height: 48px;
+                }
+
+                .password-input::placeholder {
+                    color: #888;
+                }
+
+                .password-input:focus {
+                    outline: none;
+                    background: #404040;
+                }
+
+                .password-input:disabled {
+                    background-color: #282828;
+                    cursor: not-allowed;
+                }
+
+                .submit-button {
                     width: 100%;
                     padding: 1rem;
                     background: #333;
@@ -254,26 +383,13 @@ export default function Auth() {
                     box-sizing: border-box;
                 }
 
-                .sign-in-button:hover:not(:disabled) {
+                .submit-button:hover:not(:disabled) {
                     background: #404040;
                 }
 
-                .sign-in-button:disabled {
+                .submit-button:disabled {
                     opacity: 0.7;
                     cursor: not-allowed;
-                }
-
-                .loading-spinner {
-                    width: 20px;
-                    height: 20px;
-                    border: 2px solid rgba(255, 255, 255, 0.3);
-                    border-radius: 50%;
-                    border-top-color: white;
-                    animation: spin 0.8s linear infinite;
-                }
-
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
                 }
 
                 .message {
@@ -319,44 +435,23 @@ export default function Auth() {
                     color: white;
                 }
 
-                .divider {
-                    position: relative;
-                    text-align: center;
-                    margin: 1.5rem 0;
-                }
-
-                .divider::before {
-                    content: '';
-                    position: absolute;
-                    left: 0;
-                    top: 50%;
-                    width: 100%;
-                    height: 1px;
-                    background: #333;
-                }
-
-                .divider span {
-                    position: relative;
-                    background: #1a1a1a;
-                    padding: 0 1rem;
-                    color: #888;
-                    font-size: 0.875rem;
-                }
-
-                .help-text {
+                .auth-footer {
                     text-align: center;
                     color: #888;
                     font-size: 0.875rem;
                     margin: 0;
                 }
 
-                .help-text a {
+                .auth-footer button {
+                    background: none;
+                    border: none;
                     color: white;
-                    text-decoration: none;
                     font-weight: 500;
+                    cursor: pointer;
+                    padding: 0;
                 }
 
-                .help-text a:hover {
+                .auth-footer button:hover {
                     text-decoration: underline;
                 }
 

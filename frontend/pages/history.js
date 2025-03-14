@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar"; // Import the Sidebar component
 import { CircularProgress, Typography, Box } from "@mui/material";
-import { supabase } from "../supabaseClient"; // Supabase client for authentication
+import { supabase } from "../lib/supabaseClient"; // Supabase client for authentication
 import { useRouter } from "next/router"; // To handle redirection
 
 function History() {

@@ -276,7 +276,6 @@ function CreateReport() {
                     z-index: 100;
                     background-color: white;
                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-                    margin-left: 250px; /* Match sidebar width */
                 }
 
                 .content {
@@ -455,14 +454,9 @@ function CreateReport() {
                 }
 
                 @media (max-width: 768px) {
-                    .navbar-container {
-                        margin-left: 0;
-                    }
-                    
                     .main-content {
                         margin-left: 0;
                         padding: 1.5rem;
-                        max-width: 100vw;
                     }
 
                     .report-form {

@@ -12,7 +12,7 @@ import {
 import {
     AttachFile, Send, Delete, SaveAlt
 } from "@mui/icons-material";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
 
 function Consultant({ initialData }) {
