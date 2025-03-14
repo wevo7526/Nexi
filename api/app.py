@@ -3,13 +3,21 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+from datetime import datetime
+import asyncio
+
+# Get the project root directory (one level up from api directory)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+ENV_FILE = os.path.join(PROJECT_ROOT, '.env')
 
 # Print current working directory and .env file location
 print(f"Current working directory: {os.getcwd()}")
-print(f".env file exists: {os.path.exists(os.path.join(os.getcwd(), '.env'))}")
+print(f"Project root directory: {PROJECT_ROOT}")
+print(f"Looking for .env file at: {ENV_FILE}")
+print(f".env file exists: {os.path.exists(ENV_FILE)}")
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from the correct location
+load_dotenv(ENV_FILE)
 
 # Print environment variables for debugging
 print(f"SUPABASE_URL: {os.getenv('SUPABASE_URL')}")
@@ -17,7 +25,7 @@ print(f"SUPABASE_KEY exists: {'Yes' if os.getenv('SUPABASE_KEY') else 'No'}")
 print(f"ANTHROPIC_API_KEY exists: {'Yes' if os.getenv('ANTHROPIC_API_KEY') else 'No'}")
 
 # Add the project directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(PROJECT_ROOT)
 
 from models.agent_model import ConsultantAgent
 from models.wealth_manager_agent import WealthManagerAgent
@@ -104,12 +112,40 @@ def get_multi_agent_answer():
     """
     Endpoint for MultiAgentConsultant.
     """
-    data = request.json
-    query = data.get('query')
-    chat_history = data.get('chat_history')
-    thread_id = data.get('thread_id', 'default')
-    answer = multi_agent_consultant.get_advice(query, thread_id)
-    return jsonify({'answer': answer})
+    try:
+        # Get JSON data from request
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No JSON data received'}), 400
+            
+        query = data.get('query')
+        if not query:
+            return jsonify({'error': 'Query is required'}), 400
+            
+        client_info = data.get('client_info', '')
+        thread_id = data.get('thread_id', f'thread_{datetime.now().timestamp()}')
+        chat_history = data.get('chat_history', [])
+
+        # Create an event loop and run the async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            # Generate the report
+            report = loop.run_until_complete(
+                multi_agent_consultant.generate_comprehensive_report(query, client_info)
+            )
+        finally:
+            loop.close()
+        
+        if not report:
+            return jsonify({'error': 'Failed to generate report'}), 500
+            
+        return jsonify({'answer': report})
+        
+    except Exception as e:
+        print(f"Error in get_multi_agent_answer: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
