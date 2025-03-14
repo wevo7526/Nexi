@@ -2,7 +2,7 @@ import time
 import os
 from langchain_anthropic import ChatAnthropic
 from data.data_loader import load_data
-from config.settings import API_KEY
+from config.settings import ANTHROPIC_API_KEY
 from config.supabase_client import supabase  # Import Supabase client
 from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
@@ -18,7 +18,7 @@ class ConsultantAgent:
             model="claude-3-5-sonnet-20240620",
             temperature=0,
             max_tokens=1024,
-            api_key=API_KEY  # Pass the API key here
+            api_key=ANTHROPIC_API_KEY  # Pass the API key here
         )
         self.docs = load_data()
 

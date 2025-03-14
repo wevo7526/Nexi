@@ -1,7 +1,7 @@
 import os
 from langchain_anthropic import ChatAnthropic
 from data.data_loader import load_data
-from config.settings import API_KEY
+from config.settings import ANTHROPIC_API_KEY
 from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
     UnstructuredExcelLoader,
@@ -19,7 +19,7 @@ class WealthManagerAgent:
             model="claude-3-5-sonnet-20240620",
             temperature=0.7,
             max_tokens=2048,
-            api_key=API_KEY
+            api_key=ANTHROPIC_API_KEY
         )
 
         # Load financial data for context

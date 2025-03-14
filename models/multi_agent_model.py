@@ -1,7 +1,7 @@
 from langchain.agents import Tool
 from langchain_community.utilities import SerpAPIWrapper
 from langchain_anthropic import ChatAnthropic
-from config.settings import API_KEY
+from config.settings import ANTHROPIC_API_KEY
 import logging
 
 class MultiAgentConsultant:
@@ -11,13 +11,13 @@ class MultiAgentConsultant:
             model="claude-3-5-sonnet-20240620",
             temperature=0,
             max_tokens=1024,
-            api_key=API_KEY
+            api_key=ANTHROPIC_API_KEY
         )
         self.secondary_agent = ChatAnthropic(
             model="claude-3-5-sonnet-20240620",
             temperature=0,
             max_tokens=1024,
-            api_key=API_KEY
+            api_key=ANTHROPIC_API_KEY
         )
 
         # Define the system prompts
