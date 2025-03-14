@@ -36,7 +36,7 @@ export default function SideMenu() {
   const router = useRouter(); // Initialize the router
 
   const mainMenuItems = [
-    { text: 'Knowledge', icon: <BookIcon fontSize="small" />, path: '/knowledge' },
+    { text: 'Insights', icon: <BookIcon fontSize="small" />, path: '/insights' },
     { text: 'Reports', icon: <AssessmentIcon fontSize="small" />, path: '/reports' },
     { text: 'Documents', icon: <FolderIcon fontSize="small" />, path: '/documents' }, // New Documents Tab
     { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/research' }, // New Research Tab
