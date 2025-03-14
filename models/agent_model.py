@@ -65,14 +65,20 @@ class ConsultantAgent:
         """
         Method to save chat history to Supabase.
         """
-        data = {
-            "user_id": user_id,
-            "message": message,
-            "role": role
-        }
-        supabase.table("chat_history").insert(data).execute()
+        try:
+            data = {
+                "user_id": user_id if user_id else "00000000-0000-0000-0000-000000000000",  # Anonymous user ID
+                "message": message,
+                "role": role
+            }
+            
+            supabase.table("chat_history").insert(data).execute()
+        except Exception as e:
+            print(f"Error saving chat history: {e}")
+            # Continue execution even if saving fails
+            pass
 
-    def get_advice(self, query, user_id, thread_id="default"):
+    def get_advice(self, query, user_id=None, thread_id="default"):
         """
         Method to get advice based on the user's query.
         """
@@ -84,33 +90,37 @@ class ConsultantAgent:
                 ("human", query)
             ]
             response = self.llm.invoke(messages)
+            
+            # Save chat history with user_id (which might be None)
             self.save_chat_history(user_id, query, "human")
             self.save_chat_history(user_id, response.content.strip(), "agent")
-            return response.content.strip()  # AIMessage ensures content is a string
+            
+            return response.content.strip()
         except Exception as e:
             print(f"Error encountered: {e}. Retrying in 60 seconds...")
             time.sleep(60)
             return self.get_advice(query, user_id, thread_id)
 
-    def get_answer(self, query, user_id, chat_history=None, thread_id="default", context=""):
+    def get_answer(self, query, user_id=None, chat_history=None, thread_id="default", context=""):
         """
         Method to answer user queries, including chat history if provided.
         """
         try:
             query = self.preprocess_input(query)
             messages = [("system", self.system_prompt.format(context=context))]
-            # Include chat history if available
             if chat_history:
                 messages.extend(chat_history)
             messages.append(("human", query))
 
-            # Config placeholder for thread ID (optional in this context)
             config = {"configurable": {"thread_id": thread_id}}
 
             response = self.llm.invoke(messages)
+            
+            # Save chat history with user_id (which might be None)
             self.save_chat_history(user_id, query, "human")
             self.save_chat_history(user_id, response.content.strip(), "agent")
-            return response.content.strip()  # Ensures clean string output
+            
+            return response.content.strip()
         except Exception as e:
             print(f"Error encountered: {e}. Retrying in 60 seconds...")
             time.sleep(60)

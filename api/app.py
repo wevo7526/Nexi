@@ -56,6 +56,7 @@ def get_answer():
     query = data.get('query')
     chat_history = data.get('chat_history')
     thread_id = data.get('thread_id', 'default')
+    user_id = data.get('user_id')  # Get user_id from request
 
     # Handle file upload if present
     if 'file' in request.files:
@@ -69,7 +70,7 @@ def get_answer():
     else:
         context = ""
 
-    answer = consultant_agent.get_answer(query, chat_history, thread_id, context)
+    answer = consultant_agent.get_answer(query, user_id, chat_history, thread_id, context)
     return jsonify({'answer': answer})
 
 @app.route('/get_wealth_answer', methods=['POST'])
