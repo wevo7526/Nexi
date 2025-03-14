@@ -127,7 +127,7 @@ function WealthManager({ initialData }) {
                                 {answer.visual_data?.portfolio_performance?.length > 0 ||
                                 (answer.visual_data?.allocations?.labels.length > 0 &&
                                     answer.visual_data?.allocations?.values.length > 0) ? (
-                                    <VisualDashboard data={answer.visual_data} />
+                                    <VisualDashboard data={answer} />
                                 ) : (
                                     <p>No portfolio insights to display.</p>
                                 )}
