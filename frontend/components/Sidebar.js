@@ -43,8 +43,8 @@ export default function SideMenu() {
   ];
 
   const featureMenuItems = [
-    { text: 'Consultant', icon: <BusinessIcon fontSize="small" />, path: '/consultant' },
-    { text: 'Wealth Manager', icon: <AccountBalanceIcon fontSize="small" />, path: '/wealthmanager' },
+    { text: 'Business', icon: <BusinessIcon fontSize="small" />, path: '/consultant' },
+    { text: 'Wealth', icon: <AccountBalanceIcon fontSize="small" />, path: '/wealthmanager' },
     { text: 'Team', icon: <GroupsIcon fontSize="small" />, path: '/multiagent' },
   ];
 

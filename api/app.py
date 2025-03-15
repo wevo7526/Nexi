@@ -5,6 +5,8 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from datetime import datetime
 import asyncio
+import json
+import logging
 
 # Get the project root directory (one level up from api directory)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -114,10 +116,9 @@ def get_wealth_answer():
 @app.route('/get_multi_agent_answer', methods=['POST'])
 def get_multi_agent_answer():
     """
-    Endpoint for MultiAgentConsultant.
+    Endpoint for MultiAgentConsultant with enhanced report generation.
     """
     try:
-        # Get JSON data from request
         data = request.get_json()
         
         if not data:
@@ -129,26 +130,28 @@ def get_multi_agent_answer():
             
         client_info = data.get('client_info', '')
         thread_id = data.get('thread_id', f'thread_{datetime.now().timestamp()}')
-        chat_history = data.get('chat_history', [])
 
-        # Create an event loop and run the async function
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            # Generate the report
-            report = loop.run_until_complete(
-                multi_agent_consultant.generate_comprehensive_report(query, client_info)
-            )
-        finally:
-            loop.close()
+        # Generate the comprehensive report
+        report = multi_agent_consultant.generate_comprehensive_report(query, client_info)
         
         if not report:
             return jsonify({'error': 'Failed to generate report'}), 500
-            
-        return jsonify({'answer': report})
+
+        # Save the report to a file
+        report_filename = f"report_{int(datetime.now().timestamp())}.json"
+        report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
+        
+        with open(report_path, 'w') as f:
+            json.dump(report, f, indent=2)
+
+        # Return the formatted report
+        return jsonify({
+            'answer': report,
+            'report_path': report_path
+        })
         
     except Exception as e:
-        print(f"Error in get_multi_agent_answer: {str(e)}")
+        logging.error(f"Error in get_multi_agent_answer: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

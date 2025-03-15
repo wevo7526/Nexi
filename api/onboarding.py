@@ -74,7 +74,7 @@ class ProfileCreationAgent:
         if current_index + 1 < len(self.conversation_steps):
             return self.conversation_steps[current_index + 1]
         return 'complete'
-
+        
     def chat(self, message):
         response = ""
         is_complete = False
@@ -92,7 +92,7 @@ class ProfileCreationAgent:
 
         return {
             'response': response,
-            'profile_data': self.profile_data,
+                'profile_data': self.profile_data,
             'is_complete': is_complete
         }
 

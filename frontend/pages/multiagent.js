@@ -27,17 +27,23 @@ function MultiAgentConsultant() {
     const [error, setError] = useState(null);
 
     const generateDocx = async (reportData) => {
+        console.log("Report Data:", reportData);
+
+        if (!reportData || !reportData.report_meta) {
+            throw new Error("Invalid report data structure");
+        }
+
         const doc = new Document({
             sections: [{
                 properties: {
                     page: {
                         margin: {
-                            top: 1440,    // 1 inch
-                            right: 1440,   // 1 inch
-                            bottom: 1440,  // 1 inch
-                            left: 1440,    // 1 inch
-                            header: 720,   // 0.5 inch
-                            footer: 720,   // 0.5 inch
+                            top: 1440,
+                            right: 1440,
+                            bottom: 1440,
+                            left: 1440,
+                            header: 720,
+                            footer: 720,
                             gutter: 0
                         }
                     }
@@ -45,242 +51,305 @@ function MultiAgentConsultant() {
                 children: [
                     // Header
                     new Paragraph({
-                        text: "CONSULTING REPORT",
                         heading: HeadingLevel.HEADING_1,
                         spacing: {
                             after: 400,
                             line: 360
                         },
-                        style: {
-                            size: 32,
-                            font: "Calibri"
-                        }
+                        children: [
+                            new TextRun({
+                                text: "CONSULTING REPORT",
+                                size: 32,
+                                font: "Calibri"
+                            })
+                        ]
                     }),
                     
                     // Report Info
                     new Paragraph({
-                        text: `Generated on: ${new Date(reportData.report_meta.generated_date).toLocaleDateString()}`,
-                        spacing: {
-                            after: 200
-                        }
+                        spacing: { after: 200 },
+                        children: [
+                            new TextRun({
+                                text: `Generated on: ${new Date(reportData.report_meta.generated_date).toLocaleDateString()}`
+                            })
+                        ]
                     }),
                     new Paragraph({
-                        text: `Client: ${reportData.report_meta.client}`,
-                        spacing: {
-                            after: 400
-                        }
+                        spacing: { after: 400 },
+                        children: [
+                            new TextRun({
+                                text: `Client: ${reportData.report_meta.client}`
+                            })
+                        ]
                     }),
 
                     // Executive Summary
                     new Paragraph({
-                        text: "Executive Summary",
                         heading: HeadingLevel.HEADING_2,
-                        spacing: {
-                            before: 400,
-                            after: 200
-                        }
+                        spacing: { before: 400, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Executive Summary"
+                            })
+                        ]
                     }),
                     new Paragraph({
-                        text: "This report provides a comprehensive analysis and recommendations based on the client's requirements. The findings are organized into strategic analysis, market research, financial analysis, and implementation roadmap sections.",
-                        spacing: {
-                            after: 400
-                        }
+                        spacing: { after: 400 },
+                        children: [
+                            new TextRun({
+                                text: "This report provides a comprehensive analysis and recommendations based on the client's requirements. The findings are organized into strategic analysis, market research, financial analysis, and implementation roadmap sections."
+                            })
+                        ]
                     }),
 
                     // Key Findings
                     new Paragraph({
-                        text: "Key Findings",
                         heading: HeadingLevel.HEADING_3,
-                        spacing: {
-                            before: 400,
-                            after: 200
-                        }
+                        spacing: { before: 400, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Key Findings"
+                            })
+                        ]
                     }),
                     ...(reportData.executive_summary?.key_findings || []).map(finding =>
                         new Paragraph({
-                            text: `• ${finding}`,
-                            spacing: {
-                                after: 100
-                            }
+                            spacing: { after: 100 },
+                            children: [
+                                new TextRun({
+                                    text: `• ${finding}`
+                                })
+                            ]
                         })
                     ),
 
                     // Strategic Analysis
                     new Paragraph({
-                        text: "Strategic Analysis",
                         heading: HeadingLevel.HEADING_2,
-                        spacing: {
-                            before: 400,
-                            after: 200
-                        }
+                        spacing: { before: 400, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Strategic Analysis"
+                            })
+                        ]
                     }),
                     ...Object.entries(reportData.strategic_analysis || {}).map(([key, value]) => [
                         new Paragraph({
-                            text: key.split('_').map(word => 
-                                word.charAt(0).toUpperCase() + word.slice(1)
-                            ).join(' '),
                             heading: HeadingLevel.HEADING_3,
-                            spacing: {
-                                before: 300,
-                                after: 200
-                            }
+                            spacing: { before: 300, after: 200 },
+                            children: [
+                                new TextRun({
+                                    text: key.split('_').map(word => 
+                                        word.charAt(0).toUpperCase() + word.slice(1)
+                                    ).join(' ')
+                                })
+                            ]
                         }),
                         ...(Array.isArray(value) 
                             ? value.map(item => new Paragraph({
-                                text: `• ${item}`,
-                                spacing: { after: 100 }
+                                spacing: { after: 100 },
+                                children: [
+                                    new TextRun({
+                                        text: `• ${item}`
+                                    })
+                                ]
                             }))
-                            : new Paragraph({
-                                text: value,
-                                spacing: { after: 200 }
-                            })
+                            : [new Paragraph({
+                                spacing: { after: 200 },
+                                children: [
+                                    new TextRun({
+                                        text: value
+                                    })
+                                ]
+                            })]
                         )
                     ]).flat(),
 
                     // Market Analysis
                     new Paragraph({
-                        text: "Market Analysis",
                         heading: HeadingLevel.HEADING_2,
-                        spacing: {
-                            before: 400,
-                            after: 200
-                        }
+                        spacing: { before: 400, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Market Analysis"
+                            })
+                        ]
                     }),
                     ...Object.entries(reportData.market_analysis || {}).map(([key, value]) => [
                         new Paragraph({
-                            text: key.split('_').map(word => 
-                                word.charAt(0).toUpperCase() + word.slice(1)
-                            ).join(' '),
                             heading: HeadingLevel.HEADING_3,
-                            spacing: {
-                                before: 300,
-                                after: 200
-                            }
+                            spacing: { before: 300, after: 200 },
+                            children: [
+                                new TextRun({
+                                    text: key.split('_').map(word => 
+                                        word.charAt(0).toUpperCase() + word.slice(1)
+                                    ).join(' ')
+                                })
+                            ]
                         }),
                         ...(Array.isArray(value) 
                             ? value.map(item => new Paragraph({
-                                text: `• ${item}`,
-                                spacing: { after: 100 }
+                                spacing: { after: 100 },
+                                children: [
+                                    new TextRun({
+                                        text: `• ${item}`
+                                    })
+                                ]
                             }))
-                            : new Paragraph({
-                                text: value,
-                                spacing: { after: 200 }
-                            })
+                            : [new Paragraph({
+                                spacing: { after: 200 },
+                                children: [
+                                    new TextRun({
+                                        text: value
+                                    })
+                                ]
+                            })]
                         )
                     ]).flat(),
 
                     // Financial Analysis
                     new Paragraph({
-                        text: "Financial Analysis",
                         heading: HeadingLevel.HEADING_2,
-                        spacing: {
-                            before: 400,
-                            after: 200
-                        }
+                        spacing: { before: 400, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Financial Analysis"
+                            })
+                        ]
                     }),
                     ...Object.entries(reportData.financial_analysis || {}).map(([key, value]) => [
                         new Paragraph({
-                            text: key.split('_').map(word => 
-                                word.charAt(0).toUpperCase() + word.slice(1)
-                            ).join(' '),
                             heading: HeadingLevel.HEADING_3,
-                            spacing: {
-                                before: 300,
-                                after: 200
-                            }
+                            spacing: { before: 300, after: 200 },
+                            children: [
+                                new TextRun({
+                                    text: key.split('_').map(word => 
+                                        word.charAt(0).toUpperCase() + word.slice(1)
+                                    ).join(' ')
+                                })
+                            ]
                         }),
                         ...(Array.isArray(value) 
                             ? value.map(item => new Paragraph({
-                                text: `• ${item}`,
-                                spacing: { after: 100 }
+                                spacing: { after: 100 },
+                                children: [
+                                    new TextRun({
+                                        text: `• ${item}`
+                                    })
+                                ]
                             }))
-                            : new Paragraph({
-                                text: value,
-                                spacing: { after: 200 }
-                            })
+                            : [new Paragraph({
+                                spacing: { after: 200 },
+                                children: [
+                                    new TextRun({
+                                        text: value
+                                    })
+                                ]
+                            })]
                         )
                     ]).flat(),
 
                     // Implementation Roadmap
                     new Paragraph({
-                        text: "Implementation Roadmap",
                         heading: HeadingLevel.HEADING_2,
-                        spacing: {
-                            before: 400,
-                            after: 200
-                        }
+                        spacing: { before: 400, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Implementation Roadmap"
+                            })
+                        ]
                     }),
                     ...Object.entries(reportData.implementation_roadmap || {}).map(([key, value]) => [
                         new Paragraph({
-                            text: key.split('_').map(word => 
-                                word.charAt(0).toUpperCase() + word.slice(1)
-                            ).join(' '),
                             heading: HeadingLevel.HEADING_3,
-                            spacing: {
-                                before: 300,
-                                after: 200
-                            }
+                            spacing: { before: 300, after: 200 },
+                            children: [
+                                new TextRun({
+                                    text: key.split('_').map(word => 
+                                        word.charAt(0).toUpperCase() + word.slice(1)
+                                    ).join(' ')
+                                })
+                            ]
                         }),
                         ...(Array.isArray(value) 
                             ? value.map(item => new Paragraph({
-                                text: `• ${item}`,
-                                spacing: { after: 100 }
+                                spacing: { after: 100 },
+                                children: [
+                                    new TextRun({
+                                        text: `• ${item}`
+                                    })
+                                ]
                             }))
-                            : new Paragraph({
-                                text: value,
-                                spacing: { after: 200 }
-                            })
+                            : [new Paragraph({
+                                spacing: { after: 200 },
+                                children: [
+                                    new TextRun({
+                                        text: value
+                                    })
+                                ]
+                            })]
                         )
                     ]).flat(),
 
                     // Appendix
                     new Paragraph({
-                        text: "Appendix",
                         heading: HeadingLevel.HEADING_2,
-                        spacing: {
-                            before: 400,
-                            after: 200
-                        }
+                        spacing: { before: 400, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Appendix"
+                            })
+                        ]
                     }),
                     new Paragraph({
-                        text: "Methodology",
                         heading: HeadingLevel.HEADING_3,
-                        spacing: {
-                            before: 300,
-                            after: 200
-                        }
+                        spacing: { before: 300, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Methodology"
+                            })
+                        ]
                     }),
                     ...(reportData.appendix?.methodology || []).map(item =>
                         new Paragraph({
-                            text: `• ${item}`,
-                            spacing: { after: 100 }
+                            spacing: { after: 100 },
+                            children: [
+                                new TextRun({
+                                    text: `• ${item}`
+                                })
+                            ]
                         })
                     ),
                     new Paragraph({
-                        text: "Data Sources",
                         heading: HeadingLevel.HEADING_3,
-                        spacing: {
-                            before: 300,
-                            after: 200
-                        }
+                        spacing: { before: 300, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: "Data Sources"
+                            })
+                        ]
                     }),
                     ...(reportData.appendix?.data_sources || []).map(source =>
                         new Paragraph({
-                            text: `• ${source}`,
-                            spacing: { after: 100 }
+                            spacing: { after: 100 },
+                            children: [
+                                new TextRun({
+                                    text: `• ${source}`
+                                })
+                            ]
                         })
                     ),
 
                     // Footer
                     new Paragraph({
-                        text: "Confidential - For Internal Use Only",
-                        spacing: {
-                            before: 800
-                        },
-                        style: {
-                            color: "666666",
-                            size: 20
-                        }
+                        spacing: { before: 800 },
+                        children: [
+                            new TextRun({
+                                text: "Confidential - For Internal Use Only",
+                                color: "666666",
+                                size: 20
+                            })
+                        ]
                     })
                 ],
             }],
