@@ -64,28 +64,48 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 @app.route('/get_answer', methods=['POST'])
 def get_answer():
     """
-    Endpoint for ConsultantAgent.
+    Endpoint for ConsultantAgent with chat history support.
     """
-    data = request.form
-    query = data.get('query')
-    chat_history = data.get('chat_history')
-    thread_id = data.get('thread_id', 'default')
-    user_id = data.get('user_id')  # Get user_id from request
+    try:
+        data = request.form
+        query = data.get('query')
+        if not query:
+            return jsonify({'error': 'Query is required'}), 400
 
-    # Handle file upload if present
-    if 'file' in request.files:
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(file_path)
-        docs = consultant_agent.load_document(file_path)
-        context = "\n".join([doc.page_content for doc in docs])
-    else:
+        chat_history = data.get('chat_history')
+        thread_id = data.get('thread_id', 'default')
+        user_id = data.get('user_id')
+
+        # Handle file upload if present
         context = ""
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename:
+                file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+                file.save(file_path)
+                docs = consultant_agent.load_document(file_path)
+                context = "\n".join([doc.page_content for doc in docs])
 
-    answer = consultant_agent.get_answer(query, user_id, chat_history, thread_id, context)
-    return jsonify({'answer': answer})
+        # Get answer with chat history context
+        answer = consultant_agent.get_answer(
+            query=query,
+            user_id=user_id,
+            chat_history=chat_history,
+            thread_id=thread_id,
+            context=context
+        )
+
+        return jsonify({
+            'answer': answer,
+            'success': True
+        })
+
+    except Exception as e:
+        logging.error(f"Error in get_answer: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
 
 @app.route('/get_wealth_answer', methods=['POST'])
 def get_wealth_answer():

@@ -1,5 +1,6 @@
 import time
 import os
+import json
 from langchain_anthropic import ChatAnthropic
 from data.data_loader import load_data
 from config.settings import ANTHROPIC_API_KEY
@@ -17,17 +18,84 @@ class ConsultantAgent:
         self.llm = ChatAnthropic(
             model="claude-3-5-sonnet-20240620",
             temperature=0,
-            max_tokens=1024,
-            api_key=ANTHROPIC_API_KEY  # Pass the API key here
+            max_tokens=4096,  # Increased for better context handling
+            api_key=ANTHROPIC_API_KEY
         )
         self.docs = load_data()
 
-        # Define the system prompt
-        self.system_prompt = (
-            "You are a management consultant for a Big Three firm seeking to provide analysis for any given business question or case. You will identify the business issue, research for relevant information pertaining to that issue, strategize using that information, and then finally solve the business case using found information and developed strategies. "
-            "Use the following pieces of retrieved context to answer "
-            "the question. You need to solve consulting cases, use tools to solve the business case.\n\n{context}"
-        )
+        # Enhanced system prompt to handle chat history
+        self.system_prompt = """You are a management consultant for a Big Three firm seeking to provide analysis for any given business question or case. 
+        You will identify the business issue, research for relevant information pertaining to that issue, strategize using that information, and then finally solve the business case using found information and developed strategies.
+        
+        When responding:
+        1. Consider the chat history to maintain context and build upon previous discussions
+        2. Reference previous analyses when relevant
+        3. Choose the most appropriate analysis types for the specific query. Available analysis types include:
+           - "SWOT Analysis:" (for general business strategy questions)
+           - "PESTEL Analysis:" (for macro-environmental analysis)
+           - "Porter's Five Forces:" (for industry competition analysis)
+           - "BCG Matrix:" (for portfolio analysis)
+           - "Recommendations:" (always include if providing strategic advice)
+           - "Implementation Plan:" (always include with recommendations)
+        
+        Format your response based on the analysis types that are most relevant to the query.
+        Do NOT include all analysis types in every response.
+        
+        When using specific formats:
+        
+        For PESTEL Analysis:
+        Political:
+        • [Political point 1]
+        • [Political point 2]
+        [Continue for each PESTEL factor]
+        
+        For Porter's Five Forces:
+        Threat of New Entrants:
+        • [Point 1]
+        • [Point 2]
+        
+        Bargaining Power of Suppliers:
+        • [Point 1]
+        • [Point 2]
+        
+        Bargaining Power of Buyers:
+        • [Point 1]
+        • [Point 2]
+        
+        Threat of Substitutes:
+        • [Point 1]
+        • [Point 2]
+        
+        Competitive Rivalry:
+        • [Point 1]
+        • [Point 2]
+        
+        For BCG Matrix:
+        Stars:
+        • [Product/Unit 1]
+        • [Product/Unit 2]
+        
+        Question Marks:
+        • [Product/Unit 1]
+        • [Product/Unit 2]
+        
+        Cash Cows:
+        • [Product/Unit 1]
+        • [Product/Unit 2]
+        
+        Dogs:
+        • [Product/Unit 1]
+        • [Product/Unit 2]
+        
+        4. Include specific data points and metrics when available
+        5. Provide actionable insights based on the cumulative context
+        
+        Use the following pieces of retrieved context to answer the question:
+        {context}
+        
+        Previous conversation context:
+        {chat_history}
+        """
 
     def preprocess_input(self, user_input):
         """
@@ -78,6 +146,62 @@ class ConsultantAgent:
             # Continue execution even if saving fails
             pass
 
+    def format_chat_history(self, chat_history):
+        """Format chat history for the prompt."""
+        if not chat_history:
+            return "No previous conversation."
+            
+        formatted_history = []
+        for msg in chat_history:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            formatted_history.append(f"{role}: {msg['content']}")
+        
+        return "\n".join(formatted_history)
+
+    def get_answer(self, query, user_id=None, chat_history=None, thread_id="default", context=""):
+        """
+        Enhanced method to answer user queries with chat history context.
+        """
+        try:
+            query = self.preprocess_input(query)
+            
+            # Parse chat history if it's a string
+            if isinstance(chat_history, str):
+                try:
+                    chat_history = json.loads(chat_history)
+                except:
+                    chat_history = []
+            
+            # Format the chat history
+            formatted_history = self.format_chat_history(chat_history)
+            
+            # Prepare the full context
+            full_context = context if context else "\n".join([doc.page_content for doc in self.docs])
+            
+            # Create the complete prompt with chat history
+            messages = [
+                ("system", self.system_prompt.format(
+                    context=full_context,
+                    chat_history=formatted_history
+                )),
+                ("human", query)
+            ]
+
+            # Get response from the model
+            response = self.llm.invoke(messages)
+            response_content = response.content.strip()
+            
+            # Save chat history
+            self.save_chat_history(user_id, query, "human")
+            self.save_chat_history(user_id, response_content, "agent")
+            
+            return response_content
+            
+        except Exception as e:
+            print(f"Error encountered: {e}. Retrying in 60 seconds...")
+            time.sleep(60)
+            return self.get_answer(query, user_id, chat_history, thread_id, context)
+
     def get_advice(self, query, user_id=None, thread_id="default"):
         """
         Method to get advice based on the user's query.
@@ -100,28 +224,3 @@ class ConsultantAgent:
             print(f"Error encountered: {e}. Retrying in 60 seconds...")
             time.sleep(60)
             return self.get_advice(query, user_id, thread_id)
-
-    def get_answer(self, query, user_id=None, chat_history=None, thread_id="default", context=""):
-        """
-        Method to answer user queries, including chat history if provided.
-        """
-        try:
-            query = self.preprocess_input(query)
-            messages = [("system", self.system_prompt.format(context=context))]
-            if chat_history:
-                messages.extend(chat_history)
-            messages.append(("human", query))
-
-            config = {"configurable": {"thread_id": thread_id}}
-
-            response = self.llm.invoke(messages)
-            
-            # Save chat history with user_id (which might be None)
-            self.save_chat_history(user_id, query, "human")
-            self.save_chat_history(user_id, response.content.strip(), "agent")
-            
-            return response.content.strip()
-        except Exception as e:
-            print(f"Error encountered: {e}. Retrying in 60 seconds...")
-            time.sleep(60)
-            return self.get_answer(query, user_id, chat_history, thread_id, context)
