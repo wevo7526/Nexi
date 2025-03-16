@@ -7,6 +7,10 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from supabase import create_client, Client
 
+class InitializationError(Exception):
+    """Exception raised when the AgentService fails to initialize properly."""
+    pass
+
 class AgentService:
     def __init__(self):
         try:

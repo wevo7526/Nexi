@@ -27,7 +27,7 @@ class StreamingCallbackHandler(BaseCallbackHandler):
     
     def __init__(self):
         self.tokens = []
-        self.current_thought = ""
+        self.current_content = ""
         print("\n=== Starting new research session ===\n")
         
     def on_llm_start(self, *args, **kwargs):
@@ -35,74 +35,76 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         print("\n🤔 LLM is thinking...\n")
 
     def on_llm_new_token(self, token: str, **kwargs):
-        """Run on new token. Accumulate thought tokens."""
-        if token.strip().startswith("Thought:"):
-            if self.current_thought:
-                self.tokens.append({
-                    "type": "thought",
-                    "content": self.current_thought.strip()
-                })
-                print(f"\n💭 Thought: {self.current_thought.strip()}\n")
-            self.current_thought = token
-        elif token.strip().startswith("Observation:"):
-            if self.current_thought:
-                self.tokens.append({
-                    "type": "thought",
-                    "content": self.current_thought.strip()
-                })
-                print(f"\n💭 Thought: {self.current_thought.strip()}\n")
-            self.current_thought = ""
-            self.tokens.append({
-                "type": "observation",
-                "content": token.strip()
-            })
-            print(f"\n🔍 {token.strip()}\n")
-        elif self.current_thought:
-            self.current_thought += token
+        """Process tokens and emit complete thoughts/actions/observations."""
+        self.current_content += token
         
-    def on_llm_end(self, *args, **kwargs):
-        """Run when LLM ends running."""
-        if self.current_thought:
-            self.tokens.append({
-                "type": "thought",
-                "content": self.current_thought.strip()
-            })
-            print(f"\n💭 Final Thought: {self.current_thought.strip()}\n")
-            self.current_thought = ""
-        
-    def on_agent_action(self, action, **kwargs):
-        """Run on agent action."""
-        if self.current_thought:
-            self.tokens.append({
-                "type": "thought",
-                "content": self.current_thought.strip()
-            })
-            print(f"\n💭 Thought: {self.current_thought.strip()}\n")
-            self.current_thought = ""
+        if '\n' in self.current_content:
+            lines = self.current_content.split('\n')
+            self.current_content = lines[-1]
             
-        action_content = f"Action: {action.tool}\nAction Input: {action.tool_input}"
-        self.tokens.append({
-            "type": "action",
-            "content": action_content
-        })
-        print(f"\n🔧 {action_content}\n")
+            for line in lines[:-1]:
+                if line.strip():
+                    self._process_line(line.strip())
+                
+    def _process_line(self, line: str):
+        """Process a complete line and categorize it appropriately."""
+        if not line:
+            return
+            
+        lower_line = line.lower()
+        
+        # Detect the type of content
+        if lower_line.startswith("thought:"):
+            self._emit_token("thought", line)
+        elif lower_line.startswith("action:"):
+            self._emit_token("action", line)
+        elif lower_line.startswith("action input:"):
+            if self.tokens and self.tokens[-1]["type"] == "action":
+                self.tokens[-1]["content"] += f"\n{line}"
+            else:
+                self._emit_token("action", line)
+        elif lower_line.startswith("observation:"):
+            self._emit_token("observation", line)
+        elif lower_line.startswith("final answer:"):
+            self._emit_token("final", line[13:].strip())  # Remove "Final Answer:" prefix
+        else:
+            # If it's a continuation of previous content
+            if self.tokens and self.tokens[-1]["type"] in ["thought", "observation", "action", "final"]:
+                self.tokens[-1]["content"] += f"\n{line}"
+            else:
+                self._emit_token("thought", line)
+    
+    def _emit_token(self, type_: str, content: str):
+        """Emit a token with proper formatting."""
+        if not content.strip():
+            return
+            
+        token = {
+            "status": "streaming",
+            "type": type_,
+            "content": content.strip()
+        }
+        self.tokens.append(token)
+        print(f"\n💭 Emitting {type_}: {content.strip()}\n")
+
+    def on_llm_end(self, *args, **kwargs):
+        """Process any remaining content."""
+        if self.current_content.strip():
+            self._process_line(self.current_content.strip())
+        self.current_content = ""
+
+    def on_agent_action(self, action, **kwargs):
+        """Handle agent actions with proper formatting."""
+        action_str = f"Action: {action.tool}\nAction Input: {action.tool_input}"
+        self._emit_token("action", action_str)
         
     def on_agent_finish(self, finish, **kwargs):
-        """Run on agent end."""
-        if self.current_thought:
-            self.tokens.append({
-                "type": "thought",
-                "content": self.current_thought.strip()
-            })
-            print(f"\n💭 Final Thought: {self.current_thought.strip()}\n")
-            self.current_thought = ""
-            
-        final_content = finish.return_values["output"] if finish.return_values else ""
-        self.tokens.append({
-            "type": "final",
-            "content": final_content
-        })
-        print(f"\n✨ Final Answer:\n{final_content}\n")
+        """Handle agent completion with proper formatting."""
+        if finish.return_values and "output" in finish.return_values:
+            output = finish.return_values["output"]
+            if not output.lower().startswith("final answer:"):
+                output = "Final Answer: " + output
+            self._emit_token("final", output)
         print("\n=== Research session completed ===\n")
 
 class MarketResearchAgent:
@@ -114,7 +116,8 @@ class MarketResearchAgent:
             model="claude-3-opus-20240229",
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             temperature=0.7,
-            streaming=True
+            streaming=True,
+            max_tokens=4000  # Limit token usage
         )
         print("✅ LLM initialized")
         
@@ -129,44 +132,40 @@ class MarketResearchAgent:
             Tool(
                 name="Search",
                 func=self.search.run,
-                description="Useful for searching the internet for recent information about markets, companies, industries, and trends. Input should be a search query."
+                description="A powerful search tool for finding recent market information, company data, industry trends, and statistics. Use specific search queries for best results."
             )
         ]
         
-        # Create the agent prompt
-        template = """You are an expert market research analyst with access to real-time market data. 
-Your goal is to provide comprehensive, data-driven market research analysis.
+        # Simplified prompt template to reduce token usage
+        template = """You are an expert market research analyst. Provide detailed market analysis using real-time data.
 
 Guidelines:
-- Always cite your sources and provide recent data when available
-- Structure your analysis with clear sections
-- Include market size, growth rates, key players, and trends when relevant
-- Consider both opportunities and challenges in the market
-- Provide actionable insights for business decision-makers
+- Use specific search queries to gather targeted information
+- Always cite sources and dates
+- Use concrete numbers and statistics
+- Focus on actionable insights
 
-You have access to the following tools:
-
+Available Tools:
 {tools}
 
-Use the following format STRICTLY:
+Format (YOU MUST FOLLOW THIS FORMAT EXACTLY):
+Question: [input question]
+Thought: [reasoning about next steps]
+Action: [one of: {tool_names}]
+Action Input: [specific search query]
+Observation: [search result]
+... (repeat if needed)
+Thought: [final analysis reasoning]
+Final Answer: [structured analysis]
 
-Question: the input question you must answer
-Thought: you should always think about what to do next
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know enough to provide a comprehensive analysis
-Final Answer: provide a well-structured analysis with the following sections:
-1. Market Overview
-2. Key Players and Competition
-3. Growth Trends and Opportunities
-4. Risks and Challenges
-5. Actionable Recommendations
+1. Executive Summary
+2. Market Overview
+3. Competitive Analysis
+4. Trends & Opportunities
+5. Risks & Challenges
+6. Recommendations
 
-Begin! Remember to ALWAYS follow the format above, starting with "Thought:" before any action.
-
-Previous conversation:
+Previous conversation (last 3):
 {chat_history}
 
 Question: {input}
@@ -199,58 +198,64 @@ Question: {input}
         """
         try:
             print(f"\n📝 Starting research for query: {query}")
-            
-            # Create callback handler for streaming
             handler = StreamingCallbackHandler()
             
-            # Create agent executor with streaming
             agent_executor = AgentExecutor.from_agent_and_tools(
                 agent=self.agent,
                 tools=self.tools,
                 handle_parsing_errors=True,
-                max_iterations=5,  # Increased from 3 to 5
-                max_execution_time=300,  # 5 minutes timeout
-                callbacks=[handler]
+                max_iterations=6,  # Increased from 4
+                max_execution_time=300,  # Increased from 240
+                callbacks=[handler],
+                early_stopping_method="force",
+                verbose=True
             )
-            print("✅ Agent executor created")
             
-            # Run the agent
-            print("\n🚀 Running agent...\n")
-            response = agent_executor.invoke({
-                "input": query,
-                "chat_history": self.chat_history
-            })
-            
-            # Update chat history
-            self.chat_history.extend([
-                HumanMessage(content=query),
-                AIMessage(content=response["output"])
-            ])
-            print("\n✅ Chat history updated")
-            
-            # Stream each step
-            for token in handler.tokens:
-                print(f"\n📤 Streaming: {token['type']}")
+            try:
+                # Run the agent
+                response = agent_executor.invoke({
+                    "input": query,
+                    "chat_history": self.chat_history[-3:]
+                })
+                
+                # Update chat history
+                self.chat_history.extend([
+                    HumanMessage(content=query),
+                    AIMessage(content=response["output"])
+                ])
+                
+                # Stream tokens
+                for token in handler.tokens:
+                    yield token
+                
+                # Ensure final response is sent
+                if response.get("output"):
+                    final_content = response["output"]
+                    if not final_content.lower().startswith("final answer:"):
+                        final_content = "Final Answer: " + final_content
+                        
+                    yield {
+                        "status": "complete",
+                        "type": "final",
+                        "content": final_content
+                    }
+                
+            except Exception as e:
+                error_msg = f"Error during research execution: {str(e)}"
+                print(f"\n❌ {error_msg}")
                 yield {
-                    "status": "streaming",
-                    "type": token["type"],
-                    "content": token["content"]
+                    "status": "error",
+                    "type": "error",
+                    "content": error_msg
                 }
             
-            # Send final response
-            print("\n📤 Streaming final response")
-            yield {
-                "status": "complete",
-                "type": "final",
-                "content": response["output"]
-            }
-            
         except Exception as e:
-            print(f"\n❌ Error during research: {str(e)}")
+            error_msg = f"Critical error in research_stream: {str(e)}"
+            print(f"\n❌ {error_msg}")
             yield {
                 "status": "error",
                 "type": "error",
-                "content": str(e)
+                "content": error_msg
             }
 
     def get_chat_history(self) -> List[Dict[str, str]]:
@@ -265,5 +270,5 @@ Question: {input}
                 "role": "human" if isinstance(msg, HumanMessage) else "ai",
                 "content": msg.content
             }
-            for msg in self.chat_history
+            for msg in self.chat_history[-5:]  # Only return last 5 messages
         ] 

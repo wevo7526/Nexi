@@ -56,11 +56,11 @@ const getRoleColor = (role: Message['role']) => {
         case 'assistant':
             return { bg: 'background.paper', text: 'text.primary' };
         case 'thought':
-            return { bg: '#f0f4c3', text: '#827717' }; // Light yellow background
+            return { bg: '#e3f2fd', text: '#1565c0' }; // Light blue for thoughts
         case 'action':
-            return { bg: '#b2dfdb', text: '#004d40' }; // Light teal background
+            return { bg: '#e8f5e9', text: '#2e7d32' }; // Light green for actions
         case 'observation':
-            return { bg: '#ffccbc', text: '#bf360c' }; // Light orange background
+            return { bg: '#fff3e0', text: '#e65100' }; // Light orange for observations
         default:
             return { bg: 'background.paper', text: 'text.primary' };
     }
@@ -73,11 +73,11 @@ const getRoleIcon = (role: Message['role']) => {
         case 'assistant':
             return <SmartToy />;
         case 'thought':
-            return <Psychology />;
+            return <Psychology sx={{ color: '#1565c0' }} />;
         case 'action':
-            return <Build />;
+            return <Build sx={{ color: '#2e7d32' }} />;
         case 'observation':
-            return <Search />;
+            return <Search sx={{ color: '#e65100' }} />;
         default:
             return null;
     }
@@ -161,57 +161,88 @@ export default function MarketResearch() {
                 throw new Error(errorData.message || 'Error getting research results');
             }
 
-            console.log('Starting to read stream...');
             const reader = response.body?.getReader();
             if (!reader) throw new Error('No reader available');
 
+            let buffer = '';
+            const decoder = new TextDecoder();
+
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) {
-                    console.log('Stream complete');
-                    break;
-                }
+                if (done) break;
 
-                const chunk = new TextDecoder().decode(value);
-                const lines = chunk.split('\n');
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data: ResearchResponse = JSON.parse(line.slice(6));
-                            console.log('Received chunk:', data);
-                            
-                            if (data.status === 'error') {
-                                console.error('Error in stream:', data.content);
-                                setError(data.content);
-                                continue;
-                            }
+                    if (!line.trim() || !line.startsWith('data: ')) continue;
+                    
+                    try {
+                        const data: ResearchResponse = JSON.parse(line.slice(6));
+                        console.log('Received message:', data);
 
-                            let role: Message['role'];
-                            switch (data.type) {
-                                case 'thought':
-                                    role = 'thought';
-                                    break;
-                                case 'action':
-                                    role = 'action';
-                                    break;
-                                case 'observation':
-                                    role = 'observation';
-                                    break;
-                                case 'final':
-                                    role = 'assistant';
-                                    break;
-                                default:
-                                    console.log('Unknown message type:', data.type);
-                                    continue;
-                            }
-
-                            const newMessage: Message = { role, content: data.content };
-                            console.log('Adding message:', newMessage);
-                            setMessages(prev => [...prev, newMessage]);
-                        } catch (e) {
-                            console.error('Error parsing SSE data:', e, '\nRaw line:', line);
+                        if (data.status === 'error') {
+                            console.error('Error in stream:', data.content);
+                            setError(data.content);
+                            continue;
                         }
+
+                        let role: Message['role'];
+                        let content = data.content.trim();
+
+                        // Handle different message types
+                        switch (data.type) {
+                            case 'thought':
+                                role = 'thought';
+                                if (!content.toLowerCase().startsWith('thought:')) {
+                                    content = `Thought: ${content}`;
+                                }
+                                break;
+                            case 'action':
+                                role = 'action';
+                                if (!content.toLowerCase().startsWith('action:')) {
+                                    content = `Action: ${content}`;
+                                }
+                                break;
+                            case 'observation':
+                                role = 'observation';
+                                if (!content.toLowerCase().startsWith('observation:')) {
+                                    content = `Observation: ${content}`;
+                                }
+                                break;
+                            case 'final':
+                                role = 'assistant';
+                                if (!content.toLowerCase().startsWith('final answer:')) {
+                                    content = `Final Answer: ${content}`;
+                                }
+                                break;
+                            default:
+                                console.log('Unknown message type:', data.type);
+                                continue;
+                        }
+
+                        // Only add non-empty messages
+                        if (content.trim()) {
+                            const newMessage: Message = { role, content };
+                            console.log('Adding message:', newMessage);
+                            setMessages(prev => {
+                                // Check if this is a continuation of the previous message
+                                const lastMessage = prev[prev.length - 1];
+                                if (lastMessage && lastMessage.role === role) {
+                                    // Update the last message instead of adding a new one
+                                    const updatedMessages = [...prev];
+                                    updatedMessages[updatedMessages.length - 1] = {
+                                        ...lastMessage,
+                                        content: lastMessage.content + '\n' + content
+                                    };
+                                    return updatedMessages;
+                                }
+                                return [...prev, newMessage];
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Error parsing SSE data:', e, '\nRaw line:', line);
                     }
                 }
             }
@@ -227,6 +258,15 @@ export default function MarketResearch() {
         const colors = getRoleColor(message.role);
         const icon = getRoleIcon(message.role);
 
+        // Format the content based on the role
+        let formattedContent = message.content;
+        
+        // Ensure proper formatting for each message type
+        if (!formattedContent.toLowerCase().startsWith(message.role + ':') && 
+            ['thought', 'action', 'observation'].includes(message.role)) {
+            formattedContent = `${message.role.charAt(0).toUpperCase() + message.role.slice(1)}: ${formattedContent}`;
+        }
+
         return (
             <Card 
                 key={index} 
@@ -237,17 +277,21 @@ export default function MarketResearch() {
                     '&:hover': {
                         transform: 'translateY(-2px)',
                         boxShadow: 3
-                    }
+                    },
+                    borderLeft: message.role !== 'user' ? `4px solid ${colors.text}` : 'none'
                 }}
             >
                 <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <Avatar
                             sx={{
-                                bgcolor: colors.text,
+                                bgcolor: 'transparent',
                                 width: 28,
                                 height: 28,
-                                mr: 1
+                                mr: 1,
+                                '& .MuiSvgIcon-root': {
+                                    color: colors.text
+                                }
                             }}
                         >
                             {icon}
@@ -257,7 +301,8 @@ export default function MarketResearch() {
                             sx={{ 
                                 textTransform: 'uppercase', 
                                 fontWeight: 'bold',
-                                color: colors.text
+                                color: colors.text,
+                                letterSpacing: '0.5px'
                             }}
                         >
                             {message.role}
@@ -275,10 +320,16 @@ export default function MarketResearch() {
                                 p: 0.5,
                                 borderRadius: 1,
                                 fontFamily: 'monospace'
+                            },
+                            '& ul, & ol': {
+                                pl: 2,
+                                '& li': {
+                                    mb: 1
+                                }
                             }
                         }}
                     >
-                        {message.content}
+                        {formattedContent}
                     </Typography>
                 </CardContent>
             </Card>
