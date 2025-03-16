@@ -1,6 +1,6 @@
 import sys
 import os
-from flask import Flask, request, jsonify, Response, stream_with_context
+from flask import Flask, request, jsonify, Response, stream_with_context, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 from datetime import datetime
@@ -14,7 +14,22 @@ from werkzeug.utils import secure_filename
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 ENV_FILE = os.path.join(PROJECT_ROOT, '.env')
 
-# Print current working directory and .env file location
+# Add the project directory to the Python path
+sys.path.append(PROJECT_ROOT)
+
+# Now import using absolute imports
+from api.routes.documents import documents_bp
+from api.routes.chat import chat_bp
+from api.routes.market_research import market_research_bp
+from api.routes.market_data import market_data_bp
+from api.services.document_service import DocumentService
+from models.agent_model import ConsultantAgent
+from models.wealth_manager_agent import WealthManagerAgent
+from models.multi_agent_model import MultiAgentConsultant
+from models.market_research_agent import MarketResearchAgent
+from api.services.supabase_service import SupabaseService
+
+# Print debug information
 print(f"Current working directory: {os.getcwd()}")
 print(f"Project root directory: {PROJECT_ROOT}")
 print(f"Looking for .env file at: {ENV_FILE}")
@@ -25,44 +40,74 @@ load_dotenv(ENV_FILE)
 
 # Print environment variables for debugging
 print(f"SUPABASE_URL: {os.getenv('SUPABASE_URL')}")
-print(f"SUPABASE_KEY exists: {'Yes' if os.getenv('SUPABASE_KEY') else 'No'}")
+print(f"SUPABASE_SERVICE_KEY exists: {'Yes' if os.getenv('SUPABASE_SERVICE_KEY') else 'No'}")
 print(f"ANTHROPIC_API_KEY exists: {'Yes' if os.getenv('ANTHROPIC_API_KEY') else 'No'}")
 
-# Add the project directory to the Python path
-sys.path.append(PROJECT_ROOT)
+def create_app():
+    app = Flask(__name__)
+    
+    # Configure CORS with all necessary options
+    CORS(app, 
+         resources={
+             r"/api/*": {
+                 "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                 "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
+                 "expose_headers": ["Content-Type", "Authorization"],
+                 "supports_credentials": True,
+                 "send_wildcard": False,
+                 "max_age": 3600
+             }
+         },
+         supports_credentials=True)
 
-from models.agent_model import ConsultantAgent
-from models.wealth_manager_agent import WealthManagerAgent
-from models.multi_agent_model import MultiAgentConsultant
-from models.market_research_agent import MarketResearchAgent
-from api.routes.market_research import market_research_bp
-from api.routes.market_data import market_data_bp
-from api.services.document_service import DocumentService
+    # Register blueprints
+    app.register_blueprint(documents_bp)
+    app.register_blueprint(chat_bp)
+    app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
+    app.register_blueprint(market_data_bp, url_prefix='/api/market-data')
 
-# Initialize Flask app and enable CORS
-app = Flask(__name__)
+    @app.after_request
+    def after_request(response):
+        origin = request.headers.get('Origin')
+        if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Credentials'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+            # Add Vary header to handle multiple origins
+            response.headers['Vary'] = 'Origin'
+        return response
 
-# Enable CORS for all routes
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            response = make_response()
+            origin = request.headers.get('Origin')
+            if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Credentials'
+                response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+                response.headers['Vary'] = 'Origin'
+            return response
+
+    return app
+
+# Create the Flask app
+app = create_app()
 
 # Verify environment variables
-required_env_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'ANTHROPIC_API_KEY', 'COHERE_API_KEY']
+required_env_vars = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'ANTHROPIC_API_KEY', 'COHERE_API_KEY']
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
     raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
-# Register blueprints
-app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
-app.register_blueprint(market_data_bp, url_prefix='/api/market-data')
-
 # Initialize services and agents
 document_service = DocumentService()
+supabase_service = SupabaseService()
 consultant_agent = ConsultantAgent()
 wealth_manager_agent = WealthManagerAgent()
 multi_agent_consultant = MultiAgentConsultant()
@@ -72,6 +117,7 @@ market_research_agent = MarketResearchAgent()
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
 
 # Market Research Endpoints
 @app.route('/api/market-research/research', methods=['POST'])
@@ -172,8 +218,14 @@ async def get_documents():
         documents = await document_service.get_user_documents(user_id)
         return jsonify({
             'success': True,
-            'documents': documents
+            'documents': documents.get('documents', [])
         })
+    except ValueError as e:
+        logging.error(f"Authentication error: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 401
     except Exception as e:
         logging.error(f"Error in get_documents: {str(e)}")
         return jsonify({
@@ -208,29 +260,11 @@ async def upload_document():
                 'success': False
             }), 400
 
-        # Validate file size (10MB limit)
-        if len(file.read()) > 10 * 1024 * 1024:
-            return jsonify({
-                'error': 'File too large. Maximum size is 10MB.',
-                'success': False
-            }), 400
-        file.seek(0)  # Reset file pointer after reading
-
-        # Validate file type
-        filename = file.filename
-        file_ext = os.path.splitext(filename)[1].lower()
-        if file_ext not in document_service.SUPPORTED_EXTENSIONS:
-            return jsonify({
-                'error': f'Unsupported file type: {file_ext}. Supported types: {", ".join(document_service.SUPPORTED_EXTENSIONS)}',
-                'success': False
-            }), 400
-            
-        # Save file temporarily
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(filename))
-        file.save(temp_path)
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
         try:
-            # Process document
+            file.save(temp_path)
             result = await document_service.process_document(
                 temp_path,
                 user_id,
@@ -239,24 +273,14 @@ async def upload_document():
             
             return jsonify({
                 'success': True,
-                'message': 'Document uploaded successfully',
-                'id': result['id'],
-                'status': result['status']
+                'document_id': str(result['id']),
+                'status': str(result['status'])
             })
+            
         finally:
-            # Clean up temporary file
-            try:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except Exception as cleanup_error:
-                logging.warning(f"Error cleaning up temporary file: {str(cleanup_error)}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
                 
-    except ValueError as ve:
-        logging.error(f"Validation error in upload_document: {str(ve)}")
-        return jsonify({
-            'error': str(ve),
-            'success': False
-        }), 400
     except Exception as e:
         logging.error(f"Error in upload_document: {str(e)}")
         return jsonify({
@@ -278,16 +302,11 @@ async def delete_document(document_id):
         token = auth_header.split(' ')[1]
         user_id = await document_service.get_user_id_from_token(token)
         
-        success = await document_service.delete_document(document_id, user_id)
-        if success:
-            return jsonify({
-                'success': True,
-                'message': 'Document deleted successfully'
-            })
+        result = await document_service.delete_document(document_id, user_id)
         return jsonify({
-            'error': 'Document not found',
-            'success': False
-        }), 404
+            'success': True,
+            'message': 'Document deleted successfully'
+        })
     except Exception as e:
         logging.error(f"Error in delete_document: {str(e)}")
         return jsonify({
@@ -342,21 +361,11 @@ async def get_document_status(document_id):
         token = auth_header.split(' ')[1]
         user_id = await document_service.get_user_id_from_token(token)
 
-        # Get document metadata
-        response = await document_service.supabase.table("document_metadata").select("*").eq("id", document_id).eq("user_id", user_id).execute()
-        
-        if not response.data:
-            return jsonify({
-                'error': 'Document not found',
-                'success': False
-            }), 404
-
-        document = response.data[0]
+        result = await document_service.get_document_status(document_id, user_id)
         return jsonify({
             'success': True,
-            'status': document['status'],
-            'processing_progress': document.get('processing_progress', 0),
-            'processing_error': document.get('processing_error')
+            'status': str(result['status']),
+            'processing_error': str(result['processing_error']) if result.get('processing_error') else None
         })
     except Exception as e:
         logging.error(f"Error in get_document_status: {str(e)}")
@@ -502,7 +511,7 @@ def health_check():
         # Check if required services are available
         required_services = {
             'anthropic': bool(os.getenv('ANTHROPIC_API_KEY')),
-            'supabase': bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_KEY')),
+            'supabase': bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_KEY')),
             'cohere': bool(os.getenv('COHERE_API_KEY'))
         }
         

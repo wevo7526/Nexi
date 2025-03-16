@@ -1,11 +1,8 @@
 import React from 'react';
 import { styled } from '@mui/material/styles';
-import Avatar from '@mui/material/Avatar';
 import MuiDrawer, { drawerClasses } from '@mui/material/Drawer';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -13,12 +10,12 @@ import ListItemText from '@mui/material/ListItemText';
 import BookIcon from '@mui/icons-material/Book';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import HistoryIcon from '@mui/icons-material/History';
-import FolderIcon from '@mui/icons-material/Folder'; // Icon for Documents
-import SearchIcon from '@mui/icons-material/Search'; // Icon for Research
+import FolderIcon from '@mui/icons-material/Folder';
+import SearchIcon from '@mui/icons-material/Search';
 import BusinessIcon from '@mui/icons-material/Business';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import GroupsIcon from '@mui/icons-material/Groups';
-import { useRouter } from 'next/router'; // Import useRouter from Next.js
+import { useRouter } from 'next/router';
 
 const drawerWidth = 240;
 
@@ -33,13 +30,13 @@ const Drawer = styled(MuiDrawer)({
 });
 
 export default function SideMenu() {
-  const router = useRouter(); // Initialize the router
+  const router = useRouter();
 
   const mainMenuItems = [
     { text: 'Insights', icon: <BookIcon fontSize="small" />, path: '/insights' },
     { text: 'Reports', icon: <AssessmentIcon fontSize="small" />, path: '/reports' },
-    { text: 'Documents', icon: <FolderIcon fontSize="small" />, path: '/documents' }, // New Documents Tab
-    { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/market-research' }, // New Research Tab
+    { text: 'Documents', icon: <FolderIcon fontSize="small" />, path: '/documents' },
+    { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/market-research' },
   ];
 
   const featureMenuItems = [
@@ -49,7 +46,7 @@ export default function SideMenu() {
   ];
 
   const handleNavigation = (path) => {
-    router.push(path); // Navigate to the specified path
+    router.push(path);
   };
 
   return (
@@ -61,21 +58,19 @@ export default function SideMenu() {
         },
       }}
     >
-      {/* Top Section for Logo */}
+      {/* Logo Section */}
       <Box
         sx={{
           mt: 4,
           p: 1.5,
           textAlign: 'center',
-          fontFamily: 'Roboto, sans-serif',
         }}
       >
-        {/* Display the Nexi logo */}
         <img
-          src="/Nexi.png" // Path to your logo in the public directory
+          src="/Nexi.png"
           alt="Nexi Logo"
           style={{
-            maxWidth: '80%', // Adjust to keep the logo responsive
+            maxWidth: '80%',
             height: 'auto',
           }}
         />
@@ -84,15 +79,8 @@ export default function SideMenu() {
       <Divider sx={{ my: 2 }} />
 
       {/* Main Menu Section */}
-      <Box
-        sx={{
-          flex: 1,
-          px: 2,
-          py: 1,
-        }}
-      >
+      <Box sx={{ flex: 1, px: 2, py: 1 }}>
         <List>
-          {/* Render each menu item dynamically */}
           {mainMenuItems.map((item) => (
             <ListItem 
               button 
@@ -105,7 +93,6 @@ export default function SideMenu() {
                 primary={item.text}
                 primaryTypographyProps={{
                   fontSize: '0.875rem',
-                  fontFamily: 'Roboto, sans-serif',
                 }}
               />
             </ListItem>
@@ -115,7 +102,7 @@ export default function SideMenu() {
 
       <Divider />
 
-      {/* Features Section (Former Navbar Items) */}
+      {/* Features Section */}
       <Box sx={{ px: 2, py: 1 }}>
         <List>
           {featureMenuItems.map((item) => (
@@ -130,7 +117,6 @@ export default function SideMenu() {
                 primary={item.text}
                 primaryTypographyProps={{
                   fontSize: '0.875rem',
-                  fontFamily: 'Roboto, sans-serif',
                 }}
               />
             </ListItem>
@@ -155,38 +141,11 @@ export default function SideMenu() {
               primary="History"
               primaryTypographyProps={{
                 fontSize: '0.875rem',
-                fontFamily: 'Roboto, sans-serif',
               }}
             />
           </ListItem>
         </List>
       </Box>
-
-      <Divider />
-
-      {/* Bottom Section for Account */}
-      <Stack
-        direction="row"
-        sx={{
-          p: 2,
-          gap: 1,
-          alignItems: 'center',
-          borderTop: '1px solid',
-          borderColor: 'divider',
-          mt: 'auto',
-        }}
-      >
-        <Avatar
-          alt="Account"
-          src="/static/images/avatar/7.jpg"
-          sx={{ width: 36, height: 36 }}
-        />
-        <Box sx={{ mr: 'auto' }}>
-          <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: '16px' }}>
-            Account
-          </Typography>
-        </Box>
-      </Stack>
     </Drawer>
   );
 }

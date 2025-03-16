@@ -9,43 +9,73 @@ from supabase import create_client, Client
 
 class AgentService:
     def __init__(self):
-        self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
-        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.cohere_api_key = os.getenv("COHERE_API_KEY")
+        try:
+            # Consistent environment variable names
+            self.supabase_url = os.getenv("SUPABASE_URL")
+            self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY")
+            self.cohere_api_key = os.getenv("COHERE_API_KEY")
+            self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+            
+            # Validate all required environment variables
+            missing_vars = []
+            for var_name, var_value in {
+                "SUPABASE_URL": self.supabase_url,
+                "SUPABASE_SERVICE_KEY": self.supabase_service_key,
+                "COHERE_API_KEY": self.cohere_api_key,
+                "ANTHROPIC_API_KEY": self.anthropic_api_key
+            }.items():
+                if not var_value:
+                    missing_vars.append(var_name)
+            
+            if missing_vars:
+                raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
         
-        if not all([self.supabase_url, self.supabase_key, self.anthropic_api_key, self.cohere_api_key]):
-            raise ValueError("Missing required environment variables")
-        
-        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
-        
-        # Initialize embeddings with updated import
-        self.embeddings = CohereEmbeddings(
-            cohere_api_key=self.cohere_api_key,
-            model="embed-multilingual-v3.0"
-        )
-        
-        self.llm = ChatAnthropic(
-            model="claude-3-sonnet-20240229",
-            anthropic_api_key=self.anthropic_api_key,
-            temperature=0,
-            max_tokens=4096,
-            anthropic_api_url="https://api.anthropic.com/v1"
-        )
-        
-        # Initialize vector store with updated embeddings
-        self.vector_store = SupabaseVectorStore(
-            self.supabase,
-            self.embeddings,
-            table_name="documents",
-            query_name="match_documents"
-        )
-        
-        # Initialize conversation memory
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
+            # Initialize Supabase client
+            try:
+                self.supabase: Client = create_client(self.supabase_url, self.supabase_service_key)
+            except Exception as e:
+                raise ConnectionError(f"Failed to initialize Supabase client: {str(e)}")
+            
+            # Initialize embeddings with error handling
+            try:
+                self.embeddings = CohereEmbeddings(
+                    cohere_api_key=self.cohere_api_key,
+                    model="embed-multilingual-v3.0"
+                )
+            except Exception as e:
+                raise ConnectionError(f"Failed to initialize Cohere embeddings: {str(e)}")
+            
+            # Initialize LLM with error handling
+            try:
+                self.llm = ChatAnthropic(
+                    model="claude-3-sonnet-20240229",
+                    anthropic_api_key=self.anthropic_api_key,
+                    temperature=0,
+                    max_tokens=4096,
+                    anthropic_api_url="https://api.anthropic.com/v1"
+                )
+            except Exception as e:
+                raise ConnectionError(f"Failed to initialize Anthropic LLM: {str(e)}")
+            
+            # Initialize vector store
+            try:
+                self.vector_store = SupabaseVectorStore(
+                    self.supabase,
+                    self.embeddings,
+                    table_name="documents",
+                    query_name="match_documents"
+                )
+            except Exception as e:
+                raise ConnectionError(f"Failed to initialize vector store: {str(e)}")
+            
+            # Initialize conversation memory
+            self.memory = ConversationBufferMemory(
+                memory_key="chat_history",
+                return_messages=True
+            )
+            
+        except Exception as e:
+            raise InitializationError(f"Failed to initialize AgentService: {str(e)}")
 
     async def search_documents(self, query: str, user_id: str, chat_history: List = None) -> Dict[str, Any]:
         """Search through documents and generate a response using the LLM."""
@@ -73,21 +103,38 @@ class AgentService:
             # Format source documents with more metadata
             sources = []
             for doc in result.get("source_documents", []):
+                # Convert document metadata to serializable format
+                metadata = {}
+                for key, value in doc.metadata.items():
+                    if isinstance(value, (str, int, float, bool)):
+                        metadata[key] = value
+                    else:
+                        metadata[key] = str(value)
+
                 sources.append({
-                    "content": doc.page_content,
-                    "metadata": doc.metadata,
-                    "document_name": doc.metadata.get("source", "Unknown"),
-                    "chunk_index": doc.metadata.get("chunk_index", 0),
-                    "relevance_score": doc.metadata.get("score", 1.0)
+                    "content": str(doc.page_content),
+                    "metadata": metadata,
+                    "document_name": str(doc.metadata.get("source", "Unknown")),
+                    "chunk_index": int(doc.metadata.get("chunk_index", 0)),
+                    "relevance_score": float(doc.metadata.get("score", 1.0))
                 })
 
             # Sort sources by relevance score
             sources.sort(key=lambda x: x["relevance_score"], reverse=True)
 
+            # Format chat history to be serializable
+            formatted_history = []
+            if result.get("chat_history"):
+                for msg in result["chat_history"]:
+                    formatted_history.append({
+                        "role": "user" if msg.type == "human" else "assistant",
+                        "content": str(msg.content)
+                    })
+
             return {
-                "answer": result["answer"],
+                "answer": str(result["answer"]),
                 "sources": sources,
-                "chat_history": result.get("chat_history", [])
+                "chat_history": formatted_history
             }
 
         except Exception as e:
