@@ -36,13 +36,14 @@ from models.multi_agent_model import MultiAgentConsultant
 from models.market_research_agent import MarketResearchAgent
 from api.routes.market_research import market_research_bp
 from api.routes.market_data import market_data_bp
+from api.services.document_service import DocumentService
 
 # Initialize Flask app and enable CORS
 app = Flask(__name__)
 CORS(app)
 
 # Verify environment variables
-required_env_vars = ['ALPHAVANTAGE_API_KEY']
+required_env_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'ANTHROPIC_API_KEY', 'COHERE_API_KEY']
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
     raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
@@ -51,7 +52,8 @@ if missing_vars:
 app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
 app.register_blueprint(market_data_bp, url_prefix='/api/market-data')
 
-# Initialize agents
+# Initialize services and agents
+document_service = DocumentService()
 consultant_agent = ConsultantAgent()
 wealth_manager_agent = WealthManagerAgent()
 multi_agent_consultant = MultiAgentConsultant()
@@ -144,45 +146,131 @@ def get_research_history():
             'traceback': traceback.format_exc()
         }), 500
 
-@app.route('/get_answer', methods=['POST'])
-def get_answer():
-    """
-    Endpoint for ConsultantAgent with chat history support.
-    """
+@app.route('/api/get_documents', methods=['GET'])
+async def get_documents():
     try:
-        data = request.form
-        query = data.get('query')
-        if not query:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'No authorization header'}), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+        
+        documents = await document_service.get_user_documents(user_id)
+        return jsonify({'documents': documents})
+    except Exception as e:
+        logging.error(f"Error in get_documents: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/upload_document', methods=['POST'])
+async def upload_document():
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'No authorization header'}), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+        
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+            
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+            
+        # Save file temporarily
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        file.save(temp_path)
+        
+        try:
+            # Process document
+            result = await document_service.process_document(
+                temp_path,
+                user_id,
+                original_name=file.filename
+            )
+            
+            return jsonify({
+                'message': 'Document processed successfully',
+                'document_id': result['id'],
+                'status': result['status']
+            })
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                
+    except Exception as e:
+        logging.error(f"Error in upload_document: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/delete_document/<document_id>', methods=['DELETE'])
+async def delete_document(document_id):
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'No authorization header'}), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+        
+        success = await document_service.delete_document(document_id, user_id)
+        if success:
+            return jsonify({'message': 'Document deleted successfully'})
+        return jsonify({'error': 'Document not found'}), 404
+    except Exception as e:
+        logging.error(f"Error in delete_document: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/search_documents', methods=['POST'])
+async def search_documents():
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'No authorization header'}), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+        
+        data = request.get_json()
+        if not data or 'query' not in data:
             return jsonify({'error': 'Query is required'}), 400
+            
+        results = await document_service.search_documents(data['query'], user_id)
+        return jsonify({'results': results})
+    except Exception as e:
+        logging.error(f"Error in search_documents: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-        chat_history = data.get('chat_history')
-        thread_id = data.get('thread_id', 'default')
-        user_id = data.get('user_id')
-
-        # Handle file upload if present
-        context = ""
-        if 'file' in request.files:
-            file = request.files['file']
-            if file.filename:
-                file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-                file.save(file_path)
-                docs = consultant_agent.load_document(file_path)
-                context = "\n".join([doc.page_content for doc in docs])
-
-        # Get answer with chat history context
+@app.route('/api/get_answer', methods=['POST'])
+async def get_answer():
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'No authorization header'}), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+        
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({'error': 'Query is required'}), 400
+            
+        query = data['query']
+        chat_history = data.get('chat_history', [])
+        
+        # Get answer using the ConsultantAgent
         answer = consultant_agent.get_answer(
             query=query,
             user_id=user_id,
-            chat_history=chat_history,
-            thread_id=thread_id,
-            context=context
+            chat_history=chat_history
         )
-
+        
         return jsonify({
             'answer': answer,
             'success': True
         })
-
     except Exception as e:
         logging.error(f"Error in get_answer: {str(e)}")
         return jsonify({
