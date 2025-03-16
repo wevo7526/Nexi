@@ -1,12 +1,13 @@
 import sys
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from dotenv import load_dotenv
 from datetime import datetime
 import asyncio
 import json
 import logging
+import traceback
 
 # Get the project root directory (one level up from api directory)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -32,34 +33,116 @@ sys.path.append(PROJECT_ROOT)
 from models.agent_model import ConsultantAgent
 from models.wealth_manager_agent import WealthManagerAgent
 from models.multi_agent_model import MultiAgentConsultant
-from reports import reports_bp
-from onboarding import onboarding
+from models.market_research_agent import MarketResearchAgent
+from api.routes.market_research import market_research_bp
+from api.routes.market_data import market_data_bp
 
 # Initialize Flask app and enable CORS
 app = Flask(__name__)
 CORS(app)
 
 # Verify environment variables
-required_env_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'ANTHROPIC_API_KEY']
+required_env_vars = ['ALPHAVANTAGE_API_KEY']
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
     raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
-# Register the reports blueprint
-app.register_blueprint(reports_bp)
-
-# Register the onboarding blueprint
-app.register_blueprint(onboarding, url_prefix='/api/onboarding')
+# Register blueprints
+app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
+app.register_blueprint(market_data_bp, url_prefix='/api/market-data')
 
 # Initialize agents
 consultant_agent = ConsultantAgent()
 wealth_manager_agent = WealthManagerAgent()
 multi_agent_consultant = MultiAgentConsultant()
+market_research_agent = MarketResearchAgent()
 
 # Create a temporary directory for file uploads
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Market Research Endpoints
+@app.route('/api/market-research/research', methods=['POST'])
+def conduct_research():
+    """
+    Endpoint to conduct market research based on user query with streaming response
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'query' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Query is required'
+            }), 400
+            
+        query = data['query']
+
+        def generate():
+            try:
+                for chunk in market_research_agent.research_stream(query):
+                    if chunk.get('status') == 'error':
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        return
+                    yield f"data: {json.dumps(chunk)}\n\n"
+            except Exception as e:
+                error_data = {
+                    'status': 'error',
+                    'type': 'error',
+                    'message': str(e),
+                    'traceback': traceback.format_exc()
+                }
+                yield f"data: {json.dumps(error_data)}\n\n"
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+        )
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/api/market-research/research', methods=['OPTIONS'])
+def research_options():
+    """Handle OPTIONS requests for CORS"""
+    return Response(
+        '',
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+        }
+    )
+
+@app.route('/api/market-research/history', methods=['GET'])
+def get_research_history():
+    """
+    Endpoint to retrieve market research chat history
+    """
+    try:
+        history = market_research_agent.get_chat_history()
+        return jsonify({
+            'status': 'success',
+            'history': history
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
 
 @app.route('/get_answer', methods=['POST'])
 def get_answer():
@@ -175,4 +258,6 @@ def get_multi_agent_answer():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    print("Starting Flask server...")
+    print(f"ALPHAVANTAGE_API_KEY exists: {'Yes' if os.getenv('ALPHAVANTAGE_API_KEY') else 'No'}")
+    app.run(host='0.0.0.0', port=5000, debug=True)

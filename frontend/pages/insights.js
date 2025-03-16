@@ -1,16 +1,11 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
-    CircularProgress, Box, Typography, Grid, Button,
-    Paper, useMediaQuery, IconButton, Divider,
-    Menu, MenuItem, Select, FormControl,
-    InputLabel, Card, CardContent, Alert
+    CircularProgress, Box, Typography, Grid,
+    Paper, Card, CardContent, Alert
 } from "@mui/material";
-import { useTheme } from '@mui/material/styles';
 import {
-    TrendingUp, Assessment, Business, Analytics,
-    Download, Share, FilterList, Timeline,
-    ShowChart, CompareArrows, Speed
+    TrendingUp, TrendingDown
 } from "@mui/icons-material";
 import {
     Chart as ChartJS,
@@ -21,12 +16,10 @@ import {
     Title,
     Tooltip,
     Legend,
-    ArcElement,
     BarElement
 } from 'chart.js';
-import { Line, Pie, Bar } from 'react-chartjs-2';
+import { Line, Bar } from 'react-chartjs-2';
 import Sidebar from "../components/Sidebar";
-import { supabase } from "../lib/supabaseClient";
 
 // Register ChartJS components
 ChartJS.register(
@@ -37,195 +30,364 @@ ChartJS.register(
     BarElement,
     Title,
     Tooltip,
-    Legend,
-    ArcElement
+    Legend
 );
 
+// Define the stocks we want to track
+const TRACKED_STOCKS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN'];
+
 function Insights() {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [timeRange, setTimeRange] = useState('month');
-    const [filterAnchorEl, setFilterAnchorEl] = useState(null);
-    const [selectedMetrics, setSelectedMetrics] = useState(['revenue', 'market_share', 'satisfaction', 'efficiency']);
-    const [insights, setInsights] = useState(null);
-    const [comparisonData, setComparisonData] = useState(null);
+    const [stockData, setStockData] = useState({});
+    const [newsData, setNewsData] = useState([]);
 
     useEffect(() => {
-        fetchInsights();
-        const subscription = supabase
-            .channel('insights_changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'insights' }, 
-                payload => {
-                    fetchInsights();
-                }
-            )
-            .subscribe();
+        fetchMarketData();
+        const interval = setInterval(fetchMarketData, 5 * 60 * 1000); // Refresh every 5 minutes
 
-        return () => {
-            subscription.unsubscribe();
-        };
-    }, [timeRange]);
+        return () => clearInterval(interval);
+    }, []);
 
-    const fetchInsights = async () => {
+    const fetchMarketData = async () => {
         try {
             setLoading(true);
-            
-            // Fetch insights from Supabase
-            const { data: insightsData, error: insightsError } = await supabase
-                .from('insights')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(1);
+            const stockPromises = TRACKED_STOCKS.map(async symbol => {
+                try {
+                    console.log(`Fetching data for ${symbol}...`);
+                    const response = await fetch(`/api/market-data/stock/${symbol}`);
+                    
+                    // Log the raw response
+                    console.log(`Response status for ${symbol}:`, response.status);
+                    console.log(`Response headers for ${symbol}:`, Object.fromEntries(response.headers.entries()));
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
 
-            if (insightsError) throw insightsError;
+                    // Get the response as text first
+                    const text = await response.text();
+                    console.log(`Raw response text for ${symbol}:`, text);
 
-            // Fetch historical data for comparison
-            const { data: historicalData, error: historicalError } = await supabase
-                .from('insights_history')
-                .select('*')
-                .gte('created_at', getTimeRangeDate())
-                .order('created_at', { ascending: true });
+                    // Only try to parse if we have content
+                    if (!text) {
+                        throw new Error('Empty response received');
+                    }
 
-            if (historicalError) throw historicalError;
+                    let json;
+                    try {
+                        json = JSON.parse(text);
+                    } catch (parseError) {
+                        console.error(`JSON parse error for ${symbol}:`, parseError);
+                        console.error('Failed to parse text:', text);
+                        throw new Error(`Invalid JSON response for ${symbol}`);
+                    }
 
-            setInsights(insightsData[0]);
-            setComparisonData(processHistoricalData(historicalData));
+                    if (json.error) {
+                        throw new Error(json.message || `Unknown error for ${symbol}`);
+                    }
 
+                    if (!json.data) {
+                        throw new Error(`No data received for ${symbol}`);
+                    }
+
+                    return json.data;
+                } catch (error) {
+                    console.error(`Error processing ${symbol}:`, error);
+                    throw error; // Re-throw to be handled by Promise.all
+                }
+            });
+
+            let newsResult = { articles: [] };
+            try {
+                console.log('Fetching news data...');
+                const newsResponse = await fetch('/api/market-data/news?topics=technology,earnings');
+                
+                // Log the news response
+                console.log('News response status:', newsResponse.status);
+                console.log('News response headers:', Object.fromEntries(newsResponse.headers.entries()));
+                
+                if (!newsResponse.ok) {
+                    throw new Error(`News HTTP error! status: ${newsResponse.status}`);
+                }
+
+                const newsText = await newsResponse.text();
+                console.log('Raw news response:', newsText);
+
+                if (!newsText) {
+                    console.warn('Empty news response received');
+                } else {
+                    try {
+                        const newsJson = JSON.parse(newsText);
+                        if (newsJson.error) {
+                            throw new Error(newsJson.message || 'Unknown news error');
+                        }
+                        newsResult = newsJson.data || { articles: [] };
+                        // Debug log to inspect the news data structure
+                        console.log('Processed news data:', newsResult);
+                        if (newsResult.articles?.length > 0) {
+                            console.log('Sample article ticker sentiment:', newsResult.articles[0].ticker_sentiment);
+                        }
+                    } catch (parseError) {
+                        console.error('News parse error:', parseError);
+                        console.error('Failed to parse news text:', newsText);
+                    }
+                }
+            } catch (newsError) {
+                console.error('News fetch error:', newsError);
+                // Continue with empty news array
+            }
+
+            console.log('Waiting for all stock data...');
+            const stockResults = await Promise.all(
+                stockPromises.map(promise => 
+                    promise.catch(error => {
+                        console.error('Stock promise error:', error);
+                        return null; // Return null for failed requests
+                    })
+                )
+            );
+
+            console.log('Processing stock results...');
+            const stockDataMap = {};
+            TRACKED_STOCKS.forEach((symbol, index) => {
+                if (stockResults[index]) {
+                    stockDataMap[symbol] = stockResults[index];
+                } else {
+                    console.warn(`No data available for ${symbol}`);
+                }
+            });
+
+            if (Object.keys(stockDataMap).length === 0) {
+                throw new Error('No stock data available');
+            }
+
+            console.log('Setting state...');
+            setStockData(stockDataMap);
+            setNewsData(newsResult.articles || []);
+            setError(null);
         } catch (error) {
-            console.error('Error fetching insights:', error);
-            setError(error.message);
+            console.error('Error in fetchMarketData:', error);
+            setError(error.message || 'Failed to fetch market data. Please try again later.');
+            setStockData({});
+            setNewsData([]);
         } finally {
             setLoading(false);
         }
     };
 
-    const getTimeRangeDate = () => {
-        const date = new Date();
-        switch (timeRange) {
-            case 'week':
-                date.setDate(date.getDate() - 7);
-                break;
-            case 'month':
-                date.setMonth(date.getMonth() - 1);
-                break;
-            case 'quarter':
-                date.setMonth(date.getMonth() - 3);
-                break;
-            case 'year':
-                date.setFullYear(date.getFullYear() - 1);
-                break;
-        }
-        return date.toISOString();
+    const renderStockCard = (symbol) => {
+        const data = stockData[symbol];
+        if (!data?.latest) return null;
+
+        const latest = data.latest;
+        const priceChange = latest.close - latest.open;
+        const percentChange = (priceChange / latest.open) * 100;
+
+        return (
+            <Card sx={{ height: '100%' }}>
+                <CardContent>
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Typography variant="h6" fontWeight="bold">
+                            {symbol}
+                        </Typography>
+                        {priceChange >= 0 ? (
+                            <TrendingUp sx={{ color: 'success.main' }} />
+                        ) : (
+                            <TrendingDown sx={{ color: 'error.main' }} />
+                        )}
+                    </Box>
+                    <Typography variant="h4" sx={{ my: 2 }}>
+                        ${latest.close.toFixed(2)}
+                    </Typography>
+                    <Typography
+                        variant="body1"
+                        sx={{
+                            color: priceChange >= 0 ? 'success.main' : 'error.main',
+                            fontWeight: 500
+                        }}
+                    >
+                        {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)} ({percentChange.toFixed(2)}%)
+                    </Typography>
+                    <Box mt={2}>
+                        <Grid container spacing={1}>
+                            <Grid item xs={6}>
+                                <Typography variant="caption" color="text.secondary">
+                                    High
+                                </Typography>
+                                <Typography variant="body2">
+                                    ${latest.high.toFixed(2)}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                                <Typography variant="caption" color="text.secondary">
+                                    Low
+                                </Typography>
+                                <Typography variant="body2">
+                                    ${latest.low.toFixed(2)}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="caption" color="text.secondary">
+                                    Volume
+                                </Typography>
+                                <Typography variant="body2">
+                                    {latest.volume.toLocaleString()}
+                                </Typography>
+                            </Grid>
+                        </Grid>
+                    </Box>
+                </CardContent>
+            </Card>
+        );
     };
 
-    const processHistoricalData = (data) => {
-        if (!data?.length) return null;
+    const renderPriceChart = () => {
+        if (!Object.keys(stockData).length) return null;
 
-        const metrics = {
-            revenue: [],
-            market_share: [],
-            satisfaction: [],
-            efficiency: [],
-            dates: []
-        };
-
-        data.forEach(item => {
-            metrics.revenue.push(item.revenue_growth);
-            metrics.market_share.push(item.market_share);
-            metrics.satisfaction.push(item.customer_satisfaction);
-            metrics.efficiency.push(item.operational_efficiency);
-            metrics.dates.push(new Date(item.created_at).toLocaleDateString());
-        });
-
-        return metrics;
-    };
-
-    const getTrendData = useMemo(() => {
-        if (!comparisonData) return null;
-
-        return {
-            labels: comparisonData.dates,
-            datasets: selectedMetrics.map((metric, index) => ({
-                label: metric.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-                data: comparisonData[metric],
+        const chartData = {
+            labels: stockData[TRACKED_STOCKS[0]]?.prices.map(p => new Date(p.date).toLocaleDateString()) || [],
+            datasets: TRACKED_STOCKS.map((symbol, index) => ({
+                label: symbol,
+                data: stockData[symbol]?.prices.map(p => p.close) || [],
                 borderColor: [
-                    theme.palette.primary.main,
-                    theme.palette.success.main,
-                    theme.palette.warning.main,
-                    theme.palette.info.main
+                    '#2196f3',
+                    '#4caf50',
+                    '#ff9800',
+                    '#f44336'
                 ][index],
-                tension: 0.4
+                tension: 0.4,
+                fill: false
             }))
         };
-    }, [comparisonData, selectedMetrics, theme]);
 
-    const renderMetricCard = (title, value, icon, trend) => (
-        <Card sx={{ height: '100%' }}>
-            <CardContent>
-                <Box display="flex" alignItems="center" mb={2}>
-                    {icon}
-                    <Typography variant="subtitle2" color="textSecondary" ml={1}>
-                        {title}
+        return (
+            <Paper sx={{ p: 3, mb: 4 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 500 }}>
+                    Stock Price Trends
                     </Typography>
+                <Box sx={{ height: 400 }}>
+                    <Line
+                        data={chartData}
+                        options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: false,
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)',
+                                    }
+                                }
+                            }
+                        }}
+                    />
                 </Box>
-                <Typography variant="h3" component="div" sx={{ fontWeight: 500 }}>
-                    {value}%
+            </Paper>
+        );
+    };
+
+    const renderVolumeChart = () => {
+        if (!Object.keys(stockData).length) return null;
+
+        const chartData = {
+            labels: stockData[TRACKED_STOCKS[0]]?.prices.map(p => new Date(p.date).toLocaleDateString()) || [],
+            datasets: TRACKED_STOCKS.map((symbol, index) => ({
+                label: symbol,
+                data: stockData[symbol]?.prices.map(p => p.volume) || [],
+                backgroundColor: [
+                    'rgba(33, 150, 243, 0.5)',
+                    'rgba(76, 175, 80, 0.5)',
+                    'rgba(255, 152, 0, 0.5)',
+                    'rgba(244, 67, 54, 0.5)'
+                ][index]
+            }))
+        };
+
+        return (
+            <Paper sx={{ p: 3, mb: 4 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 500 }}>
+                    Trading Volume Analysis
                 </Typography>
-                {trend && (
-                    <Box display="flex" alignItems="center" mt={1}>
-                        <CompareArrows 
-                            sx={{ 
-                                color: trend > 0 ? 'success.main' : 'error.main',
-                                transform: trend > 0 ? 'rotate(-45deg)' : 'rotate(45deg)'
-                            }} 
-                        />
-                        <Typography 
-                            variant="body2" 
-                            color={trend > 0 ? 'success.main' : 'error.main'}
-                            ml={0.5}
-                        >
-                            {Math.abs(trend)}% vs last {timeRange}
-                        </Typography>
-                    </Box>
-                )}
-            </CardContent>
-        </Card>
-    );
-
-    const handleExport = async () => {
-        try {
-            const csvContent = generateCSV();
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `insights_${new Date().toISOString()}.csv`;
-            link.click();
-        } catch (error) {
-            console.error('Error exporting data:', error);
-            setError('Failed to export data');
-        }
+                <Box sx={{ height: 400 }}>
+                    <Bar
+                        data={chartData}
+                        options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)',
+                                    }
+                                }
+                            }
+                        }}
+                    />
+                </Box>
+            </Paper>
+        );
     };
 
-    const generateCSV = () => {
-        if (!insights || !comparisonData) return '';
+    const renderNewsSection = () => {
+        if (!newsData.length) return null;
 
-        const headers = ['Date', ...selectedMetrics.map(m => m.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '))];
-        const rows = comparisonData.dates.map((date, index) => {
-            return [
-                date,
-                ...selectedMetrics.map(metric => comparisonData[metric][index])
-            ];
-        });
-
-        return [
-            headers.join(','),
-            ...rows.map(row => row.join(','))
-        ].join('\n');
+        return (
+            <Paper sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 500 }}>
+                    Market News & Analysis
+                </Typography>
+                <Grid container spacing={2}>
+                    {newsData.slice(0, 4).map((article, index) => (
+                        <Grid item xs={12} key={index}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="subtitle1" gutterBottom>
+                                        {article.title}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {article.summary}
+                                    </Typography>
+                                    <Box display="flex" gap={1} mt={1}>
+                                        {article.ticker_sentiment?.map((ticker, idx) => {
+                                            // Debug log for ticker sentiment data
+                                            console.log('Ticker sentiment data:', ticker);
+                                            const score = parseFloat(ticker.ticker_sentiment_score);
+                                            return (
+                                                <Typography 
+                                                    key={idx}
+                                                    variant="caption"
+                                                    sx={{
+                                                        color: !isNaN(score) && score > 0 ? 'success.main' : 'error.main',
+                                                        fontWeight: 500
+                                                    }}
+                                                >
+                                                    {ticker.ticker}: {!isNaN(score) ? score.toFixed(2) : 'N/A'}
+                                                </Typography>
+                                            );
+                                        })}
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    ))}
+                </Grid>
+            </Paper>
+        );
     };
 
-    if (loading) {
+    if (loading && !Object.keys(stockData).length) {
         return (
             <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
                 <Box sx={{ display: 'flex', flexDirection: 'row', flexGrow: 1 }}>
@@ -245,37 +407,9 @@ function Insights() {
             <Box sx={{ display: 'flex', flexDirection: 'row', flexGrow: 1 }}>
                 <Sidebar />
                 <Box sx={{ flexGrow: 1, p: 3 }}>
-                    {/* Header */}
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-                        <Box>
-                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 500 }}>
-                                Business Insights
-                            </Typography>
-                            <Typography color="textSecondary" sx={{ fontSize: '0.9rem' }}>
-                                Real-time metrics and trends analysis
-                            </Typography>
-                        </Box>
-                        <Box display="flex" alignItems="center">
-                            <FormControl sx={{ minWidth: 120, mr: 2 }}>
-                                <Select
-                                    value={timeRange}
-                                    onChange={(e) => setTimeRange(e.target.value)}
-                                    size="small"
-                                >
-                                    <MenuItem value="week">Last Week</MenuItem>
-                                    <MenuItem value="month">Last Month</MenuItem>
-                                    <MenuItem value="quarter">Last Quarter</MenuItem>
-                                    <MenuItem value="year">Last Year</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <IconButton onClick={handleExport} sx={{ mr: 1 }}>
-                                <Download />
-                            </IconButton>
-                            <IconButton onClick={(e) => setFilterAnchorEl(e.currentTarget)}>
-                                <FilterList />
-                            </IconButton>
-                        </Box>
-                    </Box>
+                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 500 }}>
+                        Market Insights
+                    </Typography>
 
                     {error && (
                         <Alert severity="error" sx={{ mb: 3 }}>
@@ -283,145 +417,21 @@ function Insights() {
                         </Alert>
                     )}
 
-                    {/* Key Metrics */}
+                    {/* Stock Cards */}
                     <Grid container spacing={3} mb={4}>
-                        <Grid item xs={12} sm={6} md={3}>
-                            {renderMetricCard(
-                                'Revenue Growth',
-                                insights?.revenue_growth,
-                                <TrendingUp sx={{ color: theme.palette.primary.main }} />,
-                                insights?.revenue_trend
-                            )}
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            {renderMetricCard(
-                                'Market Share',
-                                insights?.market_share,
-                                <Business sx={{ color: theme.palette.success.main }} />,
-                                insights?.market_share_trend
-                            )}
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            {renderMetricCard(
-                                'Customer Satisfaction',
-                                insights?.customer_satisfaction,
-                                <Assessment sx={{ color: theme.palette.warning.main }} />,
-                                insights?.satisfaction_trend
-                            )}
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            {renderMetricCard(
-                                'Operational Efficiency',
-                                insights?.operational_efficiency,
-                                <Speed sx={{ color: theme.palette.info.main }} />,
-                                insights?.efficiency_trend
-                            )}
-                        </Grid>
-                    </Grid>
-
-                    {/* Trend Chart */}
-                    {getTrendData && (
-                        <Paper sx={{ p: 3, mb: 4 }}>
-                            <Typography variant="h6" gutterBottom sx={{ fontWeight: 500 }}>
-                                Performance Trends
-                            </Typography>
-                            <Box sx={{ height: 400 }}>
-                                <Line 
-                                    data={getTrendData}
-                                    options={{
-                                        responsive: true,
-                                        maintainAspectRatio: false,
-                                        plugins: {
-                                            legend: {
-                                                position: 'top',
-                                            }
-                                        },
-                                        scales: {
-                                            y: {
-                                                beginAtZero: true,
-                                                grid: {
-                                                    color: 'rgba(0, 0, 0, 0.05)',
-                                                }
-                                            }
-                                        }
-                                    }}
-                                />
-                            </Box>
-                        </Paper>
-                    )}
-
-                    {/* Analysis Grid */}
-                    <Grid container spacing={3}>
-                        <Grid item xs={12} md={6}>
-                            <Paper sx={{ p: 3 }}>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 500 }}>
-                                    Key Insights
-                                </Typography>
-                                <Box component="ul" sx={{ pl: 2, mt: 2 }}>
-                                    {insights?.key_insights?.map((insight, index) => (
-                                        <Typography
-                                            component="li"
-                                            key={index}
-                                            sx={{ mb: 2, color: 'text.secondary' }}
-                                        >
-                                            {insight}
-                                        </Typography>
-                                    ))}
-                                </Box>
-                            </Paper>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Paper sx={{ p: 3 }}>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 500 }}>
-                                    Action Items
-                                </Typography>
-                                <Box component="ul" sx={{ pl: 2, mt: 2 }}>
-                                    {insights?.action_items?.map((action, index) => (
-                                        <Typography
-                                            component="li"
-                                            key={index}
-                                            sx={{ 
-                                                mb: 2,
-                                                color: theme.palette.primary.main,
-                                                fontWeight: 500
-                                            }}
-                                        >
-                                            {action}
-                                        </Typography>
-                                    ))}
-                                </Box>
-                            </Paper>
-                        </Grid>
-                    </Grid>
-
-                    {/* Metrics Selection Menu */}
-                    <Menu
-                        anchorEl={filterAnchorEl}
-                        open={Boolean(filterAnchorEl)}
-                        onClose={() => setFilterAnchorEl(null)}
-                    >
-                        {['revenue', 'market_share', 'satisfaction', 'efficiency'].map((metric) => (
-                            <MenuItem 
-                                key={metric}
-                                onClick={() => {
-                                    const newMetrics = selectedMetrics.includes(metric)
-                                        ? selectedMetrics.filter(m => m !== metric)
-                                        : [...selectedMetrics, metric];
-                                    setSelectedMetrics(newMetrics);
-                                }}
-                            >
-                                <Typography 
-                                    sx={{ 
-                                        color: selectedMetrics.includes(metric) 
-                                            ? 'primary.main' 
-                                            : 'text.primary'
-                                    }}
-                                >
-                                    {metric.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                                </Typography>
-                            </MenuItem>
+                        {TRACKED_STOCKS.map((symbol) => (
+                            <Grid item xs={12} sm={6} md={3} key={symbol}>
+                                {renderStockCard(symbol)}
+                            </Grid>
                         ))}
-                    </Menu>
+                    </Grid>
+
+                    {/* Charts */}
+                    {renderPriceChart()}
+                    {renderVolumeChart()}
+
+                    {/* News Section */}
+                    {renderNewsSection()}
                 </Box>
             </Box>
         </Box>

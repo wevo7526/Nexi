@@ -39,7 +39,7 @@ export default function SideMenu() {
     { text: 'Insights', icon: <BookIcon fontSize="small" />, path: '/insights' },
     { text: 'Reports', icon: <AssessmentIcon fontSize="small" />, path: '/reports' },
     { text: 'Documents', icon: <FolderIcon fontSize="small" />, path: '/documents' }, // New Documents Tab
-    { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/research' }, // New Research Tab
+    { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/market-research' }, // New Research Tab
   ];
 
   const featureMenuItems = [
