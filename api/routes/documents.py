@@ -1,83 +1,200 @@
 import os
 import tempfile
-from typing import List
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from fastapi.responses import JSONResponse
+from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
 from ..services.document_service import DocumentService
-from ..auth.auth_service import get_current_user
 
-router = APIRouter(prefix="/api/documents")
+documents_bp = Blueprint('documents', __name__)
 document_service = DocumentService()
 
-@router.post("/upload")
-async def upload_document(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
-):
+@documents_bp.route('/api/upload_document', methods=['POST'])
+async def upload_document():
     """Upload and process a document."""
     try:
+        # Get user ID from token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Invalid authorization header',
+                'success': False
+            }), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({
+                'error': 'No file provided',
+                'success': False
+            }), 400
+
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({
+                'error': 'No file selected',
+                'success': False
+            }), 400
+
+        filename = secure_filename(file.filename)
+        
         # Create a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
-            content = await file.read()
-            tmp.write(content)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
+            file.save(tmp.name)
             tmp_path = tmp.name
 
         try:
             # Process the document
-            doc_id = await document_service.process_document(
+            result = await document_service.process_document(
                 tmp_path,
-                current_user["id"],
-                metadata={"original_name": file.filename}
+                user_id,
+                original_name=filename
             )
 
-            return JSONResponse({
-                "message": "Document processed successfully",
-                "document_id": doc_id
+            return jsonify({
+                'success': True,
+                'message': 'Document uploaded successfully',
+                'id': result['id']
             })
+
         finally:
-            # Clean up the temporary file
-            os.unlink(tmp_path)
+            # Clean up the temporary file if it still exists
+            try:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            except Exception as cleanup_error:
+                print(f"Error cleaning up temporary file: {str(cleanup_error)}")
 
+    except ValueError as ve:
+        return jsonify({
+            'error': str(ve),
+            'success': False
+        }), 400
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
 
-@router.get("/list")
-async def list_documents(current_user: dict = Depends(get_current_user)):
+@documents_bp.route('/api/get_documents', methods=['GET'])
+async def get_documents():
     """Get all documents for the current user."""
     try:
-        documents = await document_service.get_user_documents(current_user["id"])
-        return JSONResponse({
-            "documents": documents
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Invalid authorization header',
+                'success': False
+            }), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+
+        documents = await document_service.get_user_documents(user_id)
+        return jsonify({
+            'success': True,
+            'documents': documents
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
 
-@router.delete("/{document_id}")
-async def delete_document(
-    document_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+@documents_bp.route('/api/delete_document/<document_id>', methods=['DELETE'])
+async def delete_document(document_id):
     """Delete a document."""
     try:
-        success = await document_service.delete_document(document_id, current_user["id"])
-        if success:
-            return JSONResponse({
-                "message": "Document deleted successfully"
-            })
-        raise HTTPException(status_code=404, detail="Document not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Invalid authorization header',
+                'success': False
+            }), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
 
-@router.post("/search")
-async def search_documents(
-    query: str,
-    current_user: dict = Depends(get_current_user)
-):
+        success = await document_service.delete_document(document_id, user_id)
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Document deleted successfully'
+            })
+        return jsonify({
+            'error': 'Document not found',
+            'success': False
+        }), 404
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+@documents_bp.route('/api/search_documents', methods=['POST'])
+async def search_documents():
     """Search through documents using similarity search."""
     try:
-        results = await document_service.search_documents(query, current_user["id"])
-        return JSONResponse({
-            "results": results
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Invalid authorization header',
+                'success': False
+            }), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({
+                'error': 'No query provided',
+                'success': False
+            }), 400
+
+        results = await document_service.search_documents(data['query'], user_id)
+        return jsonify({
+            'success': True,
+            'results': results
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+@documents_bp.route('/api/document_status/<document_id>', methods=['GET'])
+async def get_document_status(document_id):
+    """Get the processing status of a document."""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Invalid authorization header',
+                'success': False
+            }), 401
+            
+        token = auth_header.split(' ')[1]
+        user_id = await document_service.get_user_id_from_token(token)
+
+        # Get document metadata
+        response = await document_service.supabase.table("document_metadata").select("*").eq("id", document_id).eq("user_id", user_id).execute()
+        
+        if not response.data:
+            return jsonify({
+                'error': 'Document not found',
+                'success': False
+            }), 404
+
+        document = response.data[0]
+        return jsonify({
+            'success': True,
+            'status': document['status'],
+            'processing_progress': document.get('processing_progress', 0),
+            'processing_error': document.get('processing_error')
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500 

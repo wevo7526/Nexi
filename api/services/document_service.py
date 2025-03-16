@@ -4,7 +4,10 @@ from typing import List, Dict, Any
 import uuid
 from datetime import datetime
 from langchain_community.document_loaders import UnstructuredFileLoader
-from langchain_community.embeddings import CohereEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_cohere import CohereEmbeddings
+from langchain_anthropic import ChatAnthropic
+from langchain.prompts import ChatPromptTemplate
 import cohere
 from supabase import create_client, Client
 
@@ -16,22 +19,48 @@ class DocumentService:
         self.supabase_url = os.getenv("SUPABASE_URL")
         self.supabase_key = os.getenv("SUPABASE_KEY")
         self.cohere_api_key = os.getenv("COHERE_API_KEY")
+        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         
-        if not all([self.supabase_url, self.supabase_key, self.cohere_api_key]):
+        if not all([self.supabase_url, self.supabase_key, self.cohere_api_key, self.anthropic_api_key]):
             raise ValueError("Missing required environment variables")
         
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        
+        # Initialize embeddings
         self.embeddings = CohereEmbeddings(
             cohere_api_key=self.cohere_api_key,
-            model="embed-multilingual-v2.0",
-            user_agent="nexi-app"
+            model="embed-multilingual-v3.0"
         )
-        self.co = cohere.Client(self.cohere_api_key)
+        
+        # Initialize LLM for insights
+        self.llm = ChatAnthropic(
+            model="claude-3-sonnet-20240229",
+            anthropic_api_key=self.anthropic_api_key,
+            temperature=0,
+            max_tokens=4096,
+            anthropic_api_url="https://api.anthropic.com/v1"
+        )
+        
+        # Initialize text splitter
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000,
+            chunk_overlap=200,
+            length_function=len
+        )
+        
+        # Constants
+        self.SUPPORTED_EXTENSIONS = {'.txt', '.pdf', '.doc', '.docx'}
+        self.BATCH_SIZE = 10
 
     async def process_document(self, file_path: str, user_id: str, original_name: str) -> Dict[str, Any]:
         """Process and store a document with its embeddings."""
         doc_id = None
         try:
+            # Validate file extension
+            file_ext = os.path.splitext(original_name)[1].lower()
+            if file_ext not in self.SUPPORTED_EXTENSIONS:
+                raise ValueError(f"Unsupported file type: {file_ext}")
+
             logger.info(f"Starting document processing for {original_name}")
             
             # Create document metadata entry
@@ -42,7 +71,9 @@ class DocumentService:
                 "user_id": user_id,
                 "status": "processing",
                 "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.utcnow().isoformat(),
+                "file_type": file_ext,
+                "processing_error": None
             }
             
             # Insert metadata first
@@ -52,50 +83,142 @@ class DocumentService:
             # Load and process document
             logger.info(f"Loading document from {file_path}")
             loader = UnstructuredFileLoader(file_path)
-            documents = loader.load()
+            raw_documents = loader.load()
+            
+            # Split documents into chunks
+            documents = []
+            for doc in raw_documents:
+                chunks = self.text_splitter.split_text(doc.page_content)
+                for chunk in chunks:
+                    documents.append({"content": chunk, "metadata": doc.metadata})
             
             # Process chunks and generate embeddings
             logger.info(f"Processing {len(documents)} chunks for document {doc_id}")
-            for i, doc in enumerate(documents):
-                try:
-                    chunk_embedding = self.embeddings.embed_query(doc.page_content)
-                    
-                    chunk_data = {
-                        "document_id": doc_id,
-                        "content": doc.page_content,
-                        "embedding": chunk_embedding,
-                        "metadata": {**doc.metadata, "chunk_index": i}
-                    }
-                    
-                    self.supabase.table("documents").insert(chunk_data).execute()
-                    logger.info(f"Processed chunk {i+1}/{len(documents)} for document {doc_id}")
-                except Exception as chunk_error:
-                    logger.error(f"Error processing chunk {i} of document {doc_id}: {str(chunk_error)}")
-                    raise
+            chunks_processed = 0
+            total_chunks = len(documents)
+            
+            for i in range(0, total_chunks, self.BATCH_SIZE):
+                batch = documents[i:i + self.BATCH_SIZE]
+                batch_data = []
+                
+                for j, doc in enumerate(batch):
+                    try:
+                        chunk_embedding = self.embeddings.embed_query(doc["content"])
+                        
+                        chunk_data = {
+                            "content": doc["content"],
+                            "embedding": chunk_embedding,
+                            "metadata": {
+                                **doc["metadata"],
+                                "chunk_index": i + j,
+                                "total_chunks": total_chunks,
+                                "user_id": user_id,
+                                "file_type": file_ext,
+                                "document_name": original_name
+                            },
+                            "document_id": doc_id,
+                            "user_id": user_id
+                        }
+                        batch_data.append(chunk_data)
+                        chunks_processed += 1
+                        
+                        # Update progress periodically
+                        if chunks_processed % 10 == 0:
+                            progress = (chunks_processed / total_chunks) * 100
+                            self.supabase.table("document_metadata").update(
+                                {"processing_progress": progress}
+                            ).eq("id", doc_id).execute()
+                            
+                    except Exception as chunk_error:
+                        logger.error(f"Error processing chunk {i + j} of document {doc_id}: {str(chunk_error)}")
+                        continue
+                
+                # Insert batch
+                if batch_data:
+                    self.supabase.table("documents").insert(batch_data).execute()
+                    logger.info(f"Processed batch {i//self.BATCH_SIZE + 1}, total chunks processed: {chunks_processed}")
+            
+            # Generate initial insights
+            insights = await self.generate_document_insights(doc_id, user_id)
             
             # Update metadata status to complete
             logger.info(f"Completing document processing for {doc_id}")
             self.supabase.table("document_metadata").update(
-                {"status": "complete", "updated_at": datetime.utcnow().isoformat()}
+                {
+                    "status": "complete",
+                    "updated_at": datetime.utcnow().isoformat(),
+                    "processing_progress": 100,
+                    "total_chunks": total_chunks,
+                    "chunks_processed": chunks_processed,
+                    "initial_insights": insights
+                }
             ).eq("id", doc_id).execute()
             
-            return {"id": doc_id, "status": "complete"}
+            # Clean up temporary file
+            try:
+                os.remove(file_path)
+                logger.info(f"Cleaned up temporary file: {file_path}")
+            except Exception as cleanup_error:
+                logger.warning(f"Error cleaning up temporary file: {str(cleanup_error)}")
+            
+            return {
+                "id": doc_id,
+                "status": "complete",
+                "total_chunks": total_chunks,
+                "chunks_processed": chunks_processed,
+                "insights": insights
+            }
             
         except Exception as e:
             logger.error(f"Error processing document: {str(e)}")
-            # Update metadata status to failed if it was created
             if doc_id:
                 try:
                     self.supabase.table("document_metadata").update(
                         {
                             "status": "failed",
                             "updated_at": datetime.utcnow().isoformat(),
-                            "error": str(e)
+                            "processing_error": str(e)
                         }
                     ).eq("id", doc_id).execute()
                 except Exception as update_error:
                     logger.error(f"Error updating metadata status: {str(update_error)}")
             raise
+
+    async def generate_document_insights(self, document_id: str, user_id: str) -> Dict[str, Any]:
+        """Generate insights from a processed document."""
+        try:
+            # Get all chunks for the document
+            response = self.supabase.table("documents").select("content").eq("document_id", document_id).eq("user_id", user_id).execute()
+            
+            if not response.data:
+                raise ValueError("No document content found")
+            
+            # Combine all chunks
+            full_text = "\n\n".join([chunk["content"] for chunk in response.data])
+            
+            # Create prompt for insights generation
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are an expert document analyst. Analyze the provided document content and generate key insights. 
+                Focus on:
+                1. Main themes and topics
+                2. Key findings or arguments
+                3. Important data points or statistics
+                4. Potential implications or recommendations
+                5. Areas that might need further investigation
+                
+                Format your response as a structured JSON with these sections."""),
+                ("user", "{text}")
+            ])
+            
+            # Generate insights
+            chain = prompt | self.llm
+            result = await chain.ainvoke({"text": full_text})
+            
+            return result.content
+            
+        except Exception as e:
+            logger.error(f"Error generating insights: {str(e)}")
+            return {"error": str(e)}
 
     async def get_user_documents(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all documents for a user."""
@@ -112,7 +235,7 @@ class DocumentService:
         try:
             logger.info(f"Deleting document {document_id} for user {user_id}")
             # Delete document chunks
-            self.supabase.table("documents").delete().eq("document_id", document_id).execute()
+            self.supabase.table("documents").delete().eq("document_id", document_id).eq("user_id", user_id).execute()
             # Delete metadata
             self.supabase.table("document_metadata").delete().eq("id", document_id).eq("user_id", user_id).execute()
             return True
