@@ -21,6 +21,9 @@ import {
 import { Line, Bar } from 'react-chartjs-2';
 import Sidebar from "../components/Sidebar";
 
+// API configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
+
 // Register ChartJS components
 ChartJS.register(
     CategoryScale,
@@ -55,120 +58,85 @@ function Insights() {
             const stockPromises = TRACKED_STOCKS.map(async symbol => {
                 try {
                     console.log(`Fetching data for ${symbol}...`);
-                    const response = await fetch(`/api/market-data/stock/${symbol}`);
-                    
-                    // Log the raw response
-                    console.log(`Response status for ${symbol}:`, response.status);
-                    console.log(`Response headers for ${symbol}:`, Object.fromEntries(response.headers.entries()));
+                    const response = await fetch(`${API_BASE_URL}/api/market-data/stock/${symbol}`);
                     
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        const errorText = await response.text();
+                        console.error(`Error response for ${symbol}:`, errorText);
+                        throw new Error(`Failed to fetch data for ${symbol}: ${response.status} ${response.statusText}`);
                     }
 
-                    // Get the response as text first
-                    const text = await response.text();
-                    console.log(`Raw response text for ${symbol}:`, text);
-
-                    // Only try to parse if we have content
-                    if (!text) {
-                        throw new Error('Empty response received');
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        throw new Error(data.message || `Error fetching data for ${symbol}`);
                     }
 
-                    let json;
-                    try {
-                        json = JSON.parse(text);
-                    } catch (parseError) {
-                        console.error(`JSON parse error for ${symbol}:`, parseError);
-                        console.error('Failed to parse text:', text);
-                        throw new Error(`Invalid JSON response for ${symbol}`);
+                    // Check if we have the expected data structure
+                    if (!data.data || !data.data['Time Series (Daily)']) {
+                        console.error(`Invalid data structure for ${symbol}:`, data);
+                        throw new Error(`Invalid data received for ${symbol}`);
                     }
 
-                    if (json.error) {
-                        throw new Error(json.message || `Unknown error for ${symbol}`);
-                    }
-
-                    if (!json.data) {
-                        throw new Error(`No data received for ${symbol}`);
-                    }
-
-                    return json.data;
+                    return {
+                        symbol,
+                        latest: {
+                            open: parseFloat(data.data['1. open'] || 0),
+                            high: parseFloat(data.data['2. high'] || 0),
+                            low: parseFloat(data.data['3. low'] || 0),
+                            close: parseFloat(data.data['4. close'] || 0),
+                            volume: parseInt(data.data['5. volume'] || 0)
+                        },
+                        prices: Object.entries(data.data['Time Series (Daily)'] || {}).map(([date, values]) => ({
+                            date,
+                            open: parseFloat(values['1. open']),
+                            high: parseFloat(values['2. high']),
+                            low: parseFloat(values['3. low']),
+                            close: parseFloat(values['4. close']),
+                            volume: parseInt(values['5. volume'])
+                        })).sort((a, b) => new Date(a.date) - new Date(b.date))
+                    };
                 } catch (error) {
                     console.error(`Error processing ${symbol}:`, error);
-                    throw error; // Re-throw to be handled by Promise.all
+                    return null;
                 }
             });
 
             let newsResult = { articles: [] };
             try {
-                console.log('Fetching news data...');
-                const newsResponse = await fetch('/api/market-data/news?topics=technology,earnings');
-                
-                // Log the news response
-                console.log('News response status:', newsResponse.status);
-                console.log('News response headers:', Object.fromEntries(newsResponse.headers.entries()));
-                
-                if (!newsResponse.ok) {
-                    throw new Error(`News HTTP error! status: ${newsResponse.status}`);
-                }
-
-                const newsText = await newsResponse.text();
-                console.log('Raw news response:', newsText);
-
-                if (!newsText) {
-                    console.warn('Empty news response received');
-                } else {
-                    try {
-                        const newsJson = JSON.parse(newsText);
-                        if (newsJson.error) {
-                            throw new Error(newsJson.message || 'Unknown news error');
-                        }
-                        newsResult = newsJson.data || { articles: [] };
-                        // Debug log to inspect the news data structure
-                        console.log('Processed news data:', newsResult);
-                        if (newsResult.articles?.length > 0) {
-                            console.log('Sample article ticker sentiment:', newsResult.articles[0].ticker_sentiment);
-                        }
-                    } catch (parseError) {
-                        console.error('News parse error:', parseError);
-                        console.error('Failed to parse news text:', newsText);
+                const newsResponse = await fetch(`${API_BASE_URL}/api/market-data/news?topics=technology,earnings`);
+                if (newsResponse.ok) {
+                    const newsData = await newsResponse.json();
+                    if (!newsData.error) {
+                        newsResult = newsData.data || { articles: [] };
                     }
                 }
             } catch (newsError) {
                 console.error('News fetch error:', newsError);
-                // Continue with empty news array
             }
 
-            console.log('Waiting for all stock data...');
-            const stockResults = await Promise.all(
-                stockPromises.map(promise => 
-                    promise.catch(error => {
-                        console.error('Stock promise error:', error);
-                        return null; // Return null for failed requests
-                    })
-                )
-            );
-
-            console.log('Processing stock results...');
+            const stockResults = await Promise.all(stockPromises);
             const stockDataMap = {};
-            TRACKED_STOCKS.forEach((symbol, index) => {
-                if (stockResults[index]) {
-                    stockDataMap[symbol] = stockResults[index];
-                } else {
-                    console.warn(`No data available for ${symbol}`);
+            
+            stockResults.forEach((result) => {
+                if (result) {
+                    stockDataMap[result.symbol] = {
+                        latest: result.latest,
+                        prices: result.prices
+                    };
                 }
             });
 
             if (Object.keys(stockDataMap).length === 0) {
-                throw new Error('No stock data available');
+                throw new Error('No stock data available. Please ensure the API service is running and properly configured.');
             }
 
-            console.log('Setting state...');
             setStockData(stockDataMap);
             setNewsData(newsResult.articles || []);
             setError(null);
         } catch (error) {
             console.error('Error in fetchMarketData:', error);
-            setError(error.message || 'Failed to fetch market data. Please try again later.');
+            setError(error.message || 'Failed to fetch market data. Please ensure the API service is running.');
             setStockData({});
             setNewsData([]);
         } finally {

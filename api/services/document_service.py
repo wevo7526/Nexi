@@ -151,11 +151,39 @@ class DocumentService:
             logger.error(f"Error searching documents: {str(e)}")
             raise
 
-    async def get_user_id_from_token(self, token: str) -> str:
-        """Get user ID from Supabase token."""
+    async def get_user_id_from_token(self, token):
+        """
+        Get user ID from Supabase token with improved validation and error handling
+        """
         try:
-            user = await self.supabase.auth.get_user(token)
-            return user.user.id
+            if not token:
+                raise ValueError("No token provided")
+
+            # Create Supabase client with admin key for token verification
+            supabase_client = create_client(
+                self.supabase_url,
+                self.supabase_key
+            )
+
+            try:
+                # Get user data from token - note that get_user is not async
+                response = supabase_client.auth.get_user(token)
+                
+                if not response or not response.user:
+                    raise ValueError("Invalid token: User not found")
+                
+                user_id = response.user.id
+                if not user_id:
+                    raise ValueError("Invalid token: No user ID found")
+                    
+                return user_id
+                
+            except Exception as e:
+                logger.error(f"Token verification error: {str(e)}")
+                if "JWT" in str(e):
+                    raise ValueError("Invalid or expired token")
+                raise ValueError(f"Authentication failed: {str(e)}")
+                
         except Exception as e:
-            logger.error(f"Error getting user from token: {str(e)}")
-            raise ValueError("Invalid authentication token") 
+            logger.error(f"Error in get_user_id_from_token: {str(e)}")
+            raise ValueError(str(e)) 

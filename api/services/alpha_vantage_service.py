@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import os
 from datetime import datetime
 from langchain_community.utilities.alpha_vantage import AlphaVantageAPIWrapper
@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 class AlphaVantageService:
     def __init__(self):
         self.api_key = os.getenv('ALPHAVANTAGE_API_KEY')
-        logger.debug(f"Initializing AlphaVantageService with API key: {'[REDACTED]' if self.api_key else 'None'}")
         if not self.api_key:
-            raise ValueError("ALPHAVANTAGE_API_KEY environment variable is required")
+            raise ValueError("ALPHAVANTAGE_API_KEY environment variable is not set")
+        self.base_url = 'https://www.alphavantage.co/query'
+        logger.info("AlphaVantageService initialized")
         
         self.wrapper = AlphaVantageAPIWrapper(alphavantage_api_key=self.api_key)
-        self.base_url = "https://www.alphavantage.co/query"
 
     async def get_stock_data(self, symbol: str) -> Dict[str, Any]:
         """
@@ -37,13 +37,23 @@ class AlphaVantageService:
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
                     logger.debug(f"Response status: {response.status}")
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"Error response from Alpha Vantage: {error_text}")
+                        raise ValueError(f"Alpha Vantage API returned status {response.status}")
+                    
                     data = await response.json()
                     logger.debug(f"Raw response data: {data}")
                     
                     if "Error Message" in data:
                         raise ValueError(data["Error Message"])
                     
-                    return self._process_stock_data(data)
+                    if "Time Series (Daily)" not in data:
+                        logger.error(f"Unexpected response format: {data}")
+                        raise ValueError("Invalid response format from Alpha Vantage")
+                    
+                    return data
+                    
         except Exception as e:
             logger.error(f"Error fetching stock data: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
@@ -71,7 +81,7 @@ class AlphaVantageService:
         except Exception as e:
             raise Exception(f"Failed to fetch company overview: {str(e)}")
 
-    async def get_news_sentiment(self, symbol: str = None, topics: str = None) -> Dict[str, Any]:
+    async def get_news_sentiment(self, symbol: Optional[str] = None, topics: Optional[str] = None) -> Dict[str, Any]:
         """
         Get news and sentiment analysis for a symbol or topics.
         """
@@ -79,24 +89,31 @@ class AlphaVantageService:
             params = {
                 "function": "NEWS_SENTIMENT",
                 "apikey": self.api_key,
-                "sort": "RELEVANCE"
             }
             
             if symbol:
                 params["tickers"] = symbol
             if topics:
                 params["topics"] = topics
-            
+                
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"Error response from Alpha Vantage: {error_text}")
+                        raise ValueError(f"Alpha Vantage API returned status {response.status}")
+                        
                     data = await response.json()
                     
                     if "Error Message" in data:
                         raise ValueError(data["Error Message"])
+                        
+                    return data
                     
-                    return self._process_news_data(data)
         except Exception as e:
-            raise Exception(f"Failed to fetch news sentiment: {str(e)}")
+            logger.error(f"Error fetching news data: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise Exception(f"Failed to fetch news data: {str(e)}")
 
     async def search_symbols(self, keywords: str) -> List[Dict[str, Any]]:
         """

@@ -38,10 +38,25 @@ def get_stock_data(symbol):
     try:
         logger.info(f"Fetching stock data for symbol: {symbol}")
         data = run_async(alpha_vantage_service.get_stock_data(symbol.upper()))
+        
+        # Get the latest data point
+        latest_date = max(data['Time Series (Daily)'].keys())
+        latest_data = data['Time Series (Daily)'][latest_date]
+        
         response = {
             'error': False,
-            'data': data
+            'data': {
+                # Latest data point
+                '1. open': latest_data['1. open'],
+                '2. high': latest_data['2. high'],
+                '3. low': latest_data['3. low'],
+                '4. close': latest_data['4. close'],
+                '5. volume': latest_data['5. volume'],
+                # Historical data
+                'Time Series (Daily)': data['Time Series (Daily)']
+            }
         }
+        
         logger.info(f"Successfully fetched stock data for {symbol}")
         return jsonify(response)
     except Exception as e:

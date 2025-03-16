@@ -34,22 +34,58 @@ function Consultant({ initialData }) {
     const [activeTab, setActiveTab] = useState(0);
     const router = useRouter();
     const { showToast } = useToast();
+    const [API_URL, setApiUrl] = useState(process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000');
+    const [session, setSession] = useState(null);
 
     useEffect(() => {
         const checkSession = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) {
+                const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+                if (error) throw error;
+                
+                if (!currentSession) {
                     router.push(`/auth?redirectTo=/consultant`);
-                } else {
-                    setUser(user);
+                    return;
                 }
+                
+                setSession(currentSession);
+                setUser(currentSession.user);
+                
+                // Set up auth state change listener
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+                    setSession(newSession);
+                    setUser(newSession?.user ?? null);
+                    if (!newSession) {
+                        router.push(`/auth?redirectTo=/consultant`);
+                    }
+                });
+
+                return () => {
+                    if (subscription) subscription.unsubscribe();
+                };
             } catch (error) {
-                showToast('Error checking session', 'error');
+                console.error('Session check error:', error);
+                showToast('Error checking session: ' + error.message, 'error');
+                router.push(`/auth?redirectTo=/consultant`);
             }
         };
         checkSession();
     }, [router]);
+
+    useEffect(() => {
+        const checkApiConnection = async () => {
+            try {
+                const response = await axios.get(`${API_URL}/api/health`);
+                if (!response.data.status === 'ok') {
+                    showToast('Warning: API connection may be unstable', 'warning');
+                }
+            } catch (error) {
+                console.error('API connection error:', error);
+                showToast('Error connecting to API. Please check if the backend server is running.', 'error');
+            }
+        };
+        checkApiConnection();
+    }, [API_URL]);
 
     const handleKeyPress = (event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -71,40 +107,131 @@ function Consultant({ initialData }) {
         };
         
         try {
-            const formData = new FormData();
-            formData.append("query", query);
+            // Verify and refresh session if needed
+            const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw new Error('Session error: ' + sessionError.message);
             
-            // Add chat history to the request
-            const chatHistory = conversations.map(msg => ({
-                content: msg.content,
-                role: msg.role
-            }));
-            formData.append("chat_history", JSON.stringify(chatHistory));
-            
-            if (user?.id) {
-                formData.append("user_id", user.id);
-            }
-            if (file) {
-                formData.append("file", file);
+            if (!currentSession) {
+                showToast('Please log in to continue', 'error');
+                router.push('/auth');
+                return;
             }
 
-            const response = await axios.post("http://127.0.0.1:5000/get_answer", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
+            // Initialize our active session
+            let activeSession = currentSession;
 
-            const assistantMessage = {
-                content: response.data.answer,
-                timestamp: new Date().toISOString(),
-                role: 'assistant'
+            // Check if session is about to expire (within next 5 minutes)
+            if (currentSession.expires_at * 1000 < Date.now() + 300000) {
+                try {
+                    const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+                    if (refreshError) throw new Error('Session refresh failed: ' + refreshError.message);
+                    if (refreshedSession) {
+                        setSession(refreshedSession);
+                        activeSession = refreshedSession;
+                    } else {
+                        throw new Error('Failed to refresh session');
+                    }
+                } catch (refreshError) {
+                    console.error('Session refresh error:', refreshError);
+                    showToast('Session refresh failed: ' + refreshError.message, 'error');
+                    // Continue with current session if refresh fails
+                }
+            }
+
+            // Create request payload
+            const payload = {
+                query: query,
+                chat_history: conversations.map(msg => ({
+                    content: msg.content,
+                    role: msg.role
+                }))
             };
 
-            setConversations(prev => [...prev, userMessage, assistantMessage]);
-            setQuery("");
-            setFile(null);
+            if (user?.id) {
+                payload.user_id = user.id;
+            }
+
+            // Make the API request with timeout and retry logic
+            const maxRetries = 3;
+            let retryCount = 0;
+            let lastError = null;
+
+            while (retryCount < maxRetries) {
+                try {
+                    const response = await axios.post(`${API_URL}/api/get_answer`, payload, {
+                        headers: { 
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${activeSession.access_token}`
+                        },
+                        timeout: 30000, // 30 second timeout
+                    });
+
+                    if (!response.data || response.data.error) {
+                        throw new Error(response.data?.error || 'Failed to get an answer');
+                    }
+
+                    const assistantMessage = {
+                        content: response.data.answer,
+                        timestamp: new Date().toISOString(),
+                        role: 'assistant'
+                    };
+
+                    setConversations(prev => [...prev, userMessage, assistantMessage]);
+                    setQuery("");
+                    setFile(null);
+                    return; // Success - exit the retry loop
+                } catch (error) {
+                    lastError = error;
+                    retryCount++;
+                    
+                    if (error.response) {
+                        console.error('Server error:', error.response.data);
+                        if (error.response.status === 401) {
+                            // Try to refresh the session one last time
+                            try {
+                                const { data: { session: newSession }, error: refreshError } = await supabase.auth.refreshSession();
+                                if (refreshError) throw refreshError;
+                                if (newSession) {
+                                    setSession(newSession);
+                                    activeSession = newSession; // Update active session
+                                    continue; // Retry with new session
+                                }
+                            } catch (refreshError) {
+                                console.error('Final session refresh failed:', refreshError);
+                                showToast('Your session has expired. Please log in again.', 'error');
+                                router.push('/auth');
+                                return;
+                            }
+                        }
+                    }
+
+                    if (retryCount < maxRetries) {
+                        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff with 10s max
+                        showToast(`Retrying... Attempt ${retryCount} of ${maxRetries}`, 'info');
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            }
+
+            throw lastError || new Error('Failed to get answer after multiple retries');
         } catch (error) {
             console.error("Error getting answer:", error);
-            setError(error.response?.data?.error || "Failed to get an answer. Please try again.");
-            showToast('Error getting answer', 'error');
+            const errorMessage = error.response?.data?.error || error.message || "Failed to get an answer. Please try again.";
+            setError(errorMessage);
+            showToast(errorMessage, 'error');
+            
+            if (errorMessage.includes('session') || errorMessage.includes('token')) {
+                router.push('/auth');
+                return;
+            }
+            
+            // Add the error message to conversations for better UX
+            const errorResponseMessage = {
+                content: `Error: ${errorMessage}\nPlease try again or refresh the page if the problem persists.`,
+                timestamp: new Date().toISOString(),
+                role: 'error'
+            };
+            setConversations(prev => [...prev, userMessage, errorResponseMessage]);
         } finally {
             setLoading(false);
         }

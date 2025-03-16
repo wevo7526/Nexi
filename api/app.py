@@ -40,7 +40,15 @@ from api.services.document_service import DocumentService
 
 # Initialize Flask app and enable CORS
 app = Flask(__name__)
-CORS(app)
+
+# Enable CORS for all routes
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Verify environment variables
 required_env_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'ANTHROPIC_API_KEY', 'COHERE_API_KEY']
@@ -246,19 +254,38 @@ async def search_documents():
 @app.route('/api/get_answer', methods=['POST'])
 async def get_answer():
     try:
+        # Validate authorization
         auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'error': 'No authorization header'}), 401
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Invalid authorization header',
+                'success': False
+            }), 401
             
         token = auth_header.split(' ')[1]
         user_id = await document_service.get_user_id_from_token(token)
         
+        # Validate request data
         data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({'error': 'Query is required'}), 400
+        if not data:
+            return jsonify({
+                'error': 'No JSON data received',
+                'success': False
+            }), 400
             
-        query = data['query']
+        query = data.get('query')
+        if not query or not query.strip():
+            return jsonify({
+                'error': 'Query is required and cannot be empty',
+                'success': False
+            }), 400
+            
         chat_history = data.get('chat_history', [])
+        if not isinstance(chat_history, list):
+            return jsonify({
+                'error': 'Chat history must be a list',
+                'success': False
+            }), 400
         
         # Get answer using the ConsultantAgent
         answer = consultant_agent.get_answer(
@@ -266,6 +293,12 @@ async def get_answer():
             user_id=user_id,
             chat_history=chat_history
         )
+        
+        if not answer:
+            return jsonify({
+                'error': 'Failed to generate answer',
+                'success': False
+            }), 500
         
         return jsonify({
             'answer': answer,
@@ -344,6 +377,35 @@ def get_multi_agent_answer():
     except Exception as e:
         logging.error(f"Error in get_multi_agent_answer: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+# Health check endpoint
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """
+    Endpoint to check API health status
+    """
+    try:
+        # Check if required services are available
+        required_services = {
+            'anthropic': bool(os.getenv('ANTHROPIC_API_KEY')),
+            'supabase': bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_KEY')),
+            'cohere': bool(os.getenv('COHERE_API_KEY'))
+        }
+        
+        all_services_available = all(required_services.values())
+        
+        return jsonify({
+            'status': 'ok' if all_services_available else 'degraded',
+            'timestamp': datetime.now().isoformat(),
+            'services': required_services
+        })
+    except Exception as e:
+        logging.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 if __name__ == '__main__':
     print("Starting Flask server...")

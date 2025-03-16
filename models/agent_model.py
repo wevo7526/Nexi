@@ -163,14 +163,23 @@ class ConsultantAgent:
         Enhanced method to answer user queries with chat history context.
         """
         try:
+            # Preprocess input and validate
+            if not query or not isinstance(query, str):
+                raise ValueError("Query must be a non-empty string")
+            
             query = self.preprocess_input(query)
             
             # Parse chat history if it's a string
             if isinstance(chat_history, str):
                 try:
                     chat_history = json.loads(chat_history)
-                except:
+                except json.JSONDecodeError:
                     chat_history = []
+            elif chat_history is None:
+                chat_history = []
+            
+            if not isinstance(chat_history, list):
+                raise ValueError("Chat history must be a list")
             
             # Format the chat history
             formatted_history = self.format_chat_history(chat_history)
@@ -187,20 +196,40 @@ class ConsultantAgent:
                 ("human", query)
             ]
 
-            # Get response from the model
-            response = self.llm.invoke(messages)
-            response_content = response.content.strip()
+            # Get response from the model with retry logic
+            max_retries = 3
+            retry_count = 0
+            last_error = None
             
-            # Save chat history
-            self.save_chat_history(user_id, query, "human")
-            self.save_chat_history(user_id, response_content, "agent")
-            
-            return response_content
+            while retry_count < max_retries:
+                try:
+                    response = self.llm.invoke(messages)
+                    response_content = response.content.strip()
+                    
+                    if not response_content:
+                        raise ValueError("Empty response from model")
+                    
+                    # Save chat history
+                    self.save_chat_history(user_id, query, "human")
+                    self.save_chat_history(user_id, response_content, "agent")
+                    
+                    return response_content
+                    
+                except Exception as e:
+                    last_error = e
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"Error encountered: {e}. Retrying in {retry_count * 30} seconds...")
+                        time.sleep(retry_count * 30)
+                    else:
+                        break
+                    
+            # If we've exhausted retries, raise the last error
+            raise last_error or Exception("Failed to get answer after multiple retries")
             
         except Exception as e:
-            print(f"Error encountered: {e}. Retrying in 60 seconds...")
-            time.sleep(60)
-            return self.get_answer(query, user_id, chat_history, thread_id, context)
+            print(f"Error in get_answer: {str(e)}")
+            raise
 
     def get_advice(self, query, user_id=None, thread_id="default"):
         """
