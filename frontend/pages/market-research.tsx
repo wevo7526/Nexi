@@ -22,6 +22,7 @@ import {
 } from "@mui/icons-material";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
+import { api } from '../lib/api';
 
 interface Message {
     role: 'user' | 'assistant' | 'system' | 'thought' | 'action' | 'observation';
@@ -147,7 +148,7 @@ export default function MarketResearch() {
 
         try {
             console.log('Sending request to backend...');
-            const response = await fetch('http://localhost:5000/api/market-research/research', {
+            const response = await fetch('/api/market-research/research', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -341,89 +342,73 @@ export default function MarketResearch() {
             <div className="content">
                 <Sidebar />
                 <div className="main-content">
-                    <Box component="main" sx={{ flexGrow: 1, p: 3, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                        <Paper 
-                            elevation={3} 
-                            sx={{ 
-                                flex: 1, 
-                                mb: 2, 
-                                p: 2, 
-                                overflowY: 'auto',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                bgcolor: 'grey.50'
-                            }}
-                        >
-                            {messages.map((message, index) => renderMessage(message, index))}
-                            {loading && (
-                                <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-                                    <CircularProgress />
-                                </Box>
-                            )}
-                            <div ref={messagesEndRef} />
-                        </Paper>
+                    <Box sx={{ mb: 4 }}>
+                        <Typography variant="h4" gutterBottom>
+                            Market Research
+                        </Typography>
+                        <Typography variant="body1" color="text.secondary">
+                            Get comprehensive market research and analysis for your business queries.
+                        </Typography>
+                    </Box>
 
-                        {error && (
-                            <Alert 
-                                severity="error" 
-                                onClose={() => setError(null)} 
-                                sx={{ 
-                                    mb: 2,
-                                    '& .MuiAlert-message': {
-                                        width: '100%'
-                                    }
-                                }}
-                            >
-                                {error}
-                            </Alert>
-                        )}
-
-                        <Paper 
-                            component="form" 
-                            onSubmit={handleSubmit} 
-                            sx={{ 
-                                p: 2,
-                                bgcolor: 'background.paper',
-                                boxShadow: 2
-                            }}
-                        >
+                    <Card sx={{ mb: 4 }}>
+                        <CardContent>
                             <Grid container spacing={2}>
-                                <Grid item xs>
-                                    <TextField
-                                        fullWidth
-                                        multiline
-                                        rows={2}
-                                        variant="outlined"
-                                        placeholder="Enter your market research query..."
-                                        value={query}
-                                        onChange={(e) => setQuery(e.target.value)}
-                                        disabled={loading}
+                                <Grid item xs={12}>
+                                    <Paper
+                                        component="form"
+                                        onSubmit={handleSubmit}
                                         sx={{
-                                            '& .MuiOutlinedInput-root': {
-                                                bgcolor: 'background.paper'
-                                            }
-                                        }}
-                                    />
-                                </Grid>
-                                <Grid item>
-                                    <Button
-                                        type="submit"
-                                        variant="contained"
-                                        disabled={loading || !query.trim()}
-                                        sx={{ 
-                                            height: '100%',
-                                            px: 4,
-                                            bgcolor: 'primary.main',
-                                            '&:hover': {
-                                                bgcolor: 'primary.dark'
-                                            }
+                                            p: 2,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            border: '1px solid',
+                                            borderColor: 'divider',
+                                            borderRadius: 2
                                         }}
                                     >
-                                        {loading ? <CircularProgress size={24} /> : 'Research'}
-                                    </Button>
+                                        <TextField
+                                            fullWidth
+                                            value={query}
+                                            onChange={(e) => setQuery(e.target.value)}
+                                            placeholder="Enter your market research query..."
+                                            disabled={loading}
+                                            sx={{ mr: 2 }}
+                                        />
+                                        <Button
+                                            type="submit"
+                                            variant="contained"
+                                            disabled={loading || !query.trim()}
+                                            sx={{ 
+                                                height: '100%',
+                                                px: 4,
+                                                bgcolor: 'primary.main',
+                                                '&:hover': {
+                                                    bgcolor: 'primary.dark'
+                                                }
+                                            }}
+                                        >
+                                            {loading ? <CircularProgress size={24} /> : 'Research'}
+                                        </Button>
+                                    </Paper>
                                 </Grid>
                             </Grid>
-                        </Paper>
+                        </CardContent>
+                    </Card>
+
+                    {error && (
+                        <Alert severity="error" sx={{ mb: 2 }}>
+                            {error}
+                        </Alert>
+                    )}
+
+                    <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+                        {messages.map((message, index) => (
+                            <Box key={index} sx={{ mb: 2 }}>
+                                {renderMessage(message, index)}
+                            </Box>
+                        ))}
+                        <div ref={messagesEndRef} />
                     </Box>
                 </div>
             </div>

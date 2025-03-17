@@ -2,9 +2,8 @@ import time
 import os
 import json
 from langchain_anthropic import ChatAnthropic
-from data.data_loader import load_data
 from config.settings import ANTHROPIC_API_KEY
-from config.supabase_client import supabase  # Import Supabase client
+from config.supabase_client import supabase
 from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
     UnstructuredExcelLoader,
@@ -21,7 +20,7 @@ class ConsultantAgent:
             max_tokens=4096,  # Increased for better context handling
             api_key=ANTHROPIC_API_KEY
         )
-        self.docs = load_data()
+        self.docs = []  # Initialize empty docs list
 
         # Enhanced system prompt to handle chat history
         self.system_prompt = """You are a management consultant for a Big Three firm seeking to provide analysis for any given business question or case. 
@@ -250,6 +249,5 @@ class ConsultantAgent:
             
             return response.content.strip()
         except Exception as e:
-            print(f"Error encountered: {e}. Retrying in 60 seconds...")
-            time.sleep(60)
-            return self.get_advice(query, user_id, thread_id)
+            print(f"Error in get_advice: {str(e)}")
+            raise

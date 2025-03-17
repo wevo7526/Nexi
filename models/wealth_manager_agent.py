@@ -1,6 +1,5 @@
 import os
 from langchain_anthropic import ChatAnthropic
-from data.data_loader import load_data
 from config.settings import ANTHROPIC_API_KEY
 from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
@@ -22,8 +21,8 @@ class WealthManagerAgent:
             api_key=ANTHROPIC_API_KEY
         )
 
-        # Load financial data for context
-        self.docs = load_data()
+        # Initialize empty docs list
+        self.docs = []
 
         # Define the system prompt
         self.system_prompt = (

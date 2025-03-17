@@ -49,13 +49,12 @@ def create_app():
     # Configure CORS with all necessary options
     CORS(app, 
          resources={
-             r"/api/*": {
+             r"/*": {  # Apply to all routes
                  "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                 "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
+                 "allow_headers": ["Content-Type", "Authorization"],
                  "expose_headers": ["Content-Type", "Authorization"],
                  "supports_credentials": True,
-                 "send_wildcard": False,
                  "max_age": 3600
              }
          },
@@ -74,9 +73,8 @@ def create_app():
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Credentials'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
             response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
-            # Add Vary header to handle multiple origins
             response.headers['Vary'] = 'Origin'
         return response
 
@@ -89,7 +87,7 @@ def create_app():
                 response.headers['Access-Control-Allow-Origin'] = origin
                 response.headers['Access-Control-Allow-Credentials'] = 'true'
                 response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Credentials'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
                 response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
                 response.headers['Vary'] = 'Origin'
             return response
@@ -152,18 +150,27 @@ def conduct_research():
                 }
                 yield f"data: {json.dumps(error_data)}\n\n"
 
-        return Response(
+        response = Response(
             stream_with_context(generate()),
             mimetype='text/event-stream',
             headers={
                 'Cache-Control': 'no-cache',
                 'Connection': 'keep-alive',
-                'X-Accel-Buffering': 'no',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type'
+                'X-Accel-Buffering': 'no'
             }
         )
+        
+        # Add CORS headers
+        origin = request.headers.get('Origin')
+        if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+            response.headers['Vary'] = 'Origin'
+            
+        return response
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -174,14 +181,16 @@ def conduct_research():
 @app.route('/api/market-research/research', methods=['OPTIONS'])
 def research_options():
     """Handle OPTIONS requests for CORS"""
-    return Response(
-        '',
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
-        }
-    )
+    response = make_response()
+    origin = request.headers.get('Origin')
+    if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+        response.headers['Vary'] = 'Origin'
+    return response
 
 @app.route('/api/market-research/history', methods=['GET'])
 def get_research_history():
@@ -502,32 +511,32 @@ def get_multi_agent_answer():
         return jsonify({'error': str(e)}), 500
 
 # Health check endpoint
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health', methods=['GET', 'OPTIONS'])
 def health_check():
-    """
-    Endpoint to check API health status
-    """
+    if request.method == 'OPTIONS':
+        # Handle preflight request
+        response = make_response()
+        origin = request.headers.get('Origin')
+        if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+            response.headers['Vary'] = 'Origin'
+        return response
+
     try:
-        # Check if required services are available
-        required_services = {
-            'anthropic': bool(os.getenv('ANTHROPIC_API_KEY')),
-            'supabase': bool(os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_SERVICE_KEY')),
-            'cohere': bool(os.getenv('COHERE_API_KEY'))
-        }
-        
-        all_services_available = all(required_services.values())
-        
         return jsonify({
-            'status': 'ok' if all_services_available else 'degraded',
-            'timestamp': datetime.now().isoformat(),
-            'services': required_services
+            'status': 'ok',
+            'message': 'API is healthy',
+            'timestamp': datetime.utcnow().isoformat()
         })
     except Exception as e:
-        logging.error(f"Health check failed: {str(e)}")
+        logging.error(f"Health check error: {str(e)}")
         return jsonify({
             'status': 'error',
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
+            'message': str(e)
         }), 500
 
 if __name__ == '__main__':

@@ -18,6 +18,7 @@ import {
 } from "@mui/icons-material";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
+import { api, checkApiHealth } from "../lib/api";
 import {
     LineChart, Line, BarChart, Bar, PieChart, Pie,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -34,7 +35,6 @@ function Consultant({ initialData }) {
     const [activeTab, setActiveTab] = useState(0);
     const router = useRouter();
     const { showToast } = useToast();
-    const [API_URL, setApiUrl] = useState(process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000');
     const [session, setSession] = useState(null);
 
     useEffect(() => {
@@ -75,8 +75,8 @@ function Consultant({ initialData }) {
     useEffect(() => {
         const checkApiConnection = async () => {
             try {
-                const response = await axios.get(`${API_URL}/api/health`);
-                if (!response.data.status === 'ok') {
+                const response = await checkApiHealth();
+                if (response.status !== 'ok') {
                     showToast('Warning: API connection may be unstable', 'warning');
                 }
             } catch (error) {
@@ -85,7 +85,7 @@ function Consultant({ initialData }) {
             }
         };
         checkApiConnection();
-    }, [API_URL]);
+    }, []);
 
     const handleKeyPress = (event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -158,9 +158,8 @@ function Consultant({ initialData }) {
 
             while (retryCount < maxRetries) {
                 try {
-                    const response = await axios.post(`${API_URL}/api/get_answer`, payload, {
+                    const response = await api.post('/api/get_answer', payload, {
                         headers: { 
-                            "Content-Type": "application/json",
                             "Authorization": `Bearer ${activeSession.access_token}`
                         },
                         timeout: 30000, // 30 second timeout
