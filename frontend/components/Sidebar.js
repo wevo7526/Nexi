@@ -7,17 +7,17 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import BookIcon from '@mui/icons-material/Book';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import HistoryIcon from '@mui/icons-material/History';
-import FolderIcon from '@mui/icons-material/Folder';
-import SearchIcon from '@mui/icons-material/Search';
 import BusinessIcon from '@mui/icons-material/Business';
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import SearchIcon from '@mui/icons-material/Search';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GroupsIcon from '@mui/icons-material/Groups';
+import HistoryIcon from '@mui/icons-material/History';
 import { useRouter } from 'next/router';
+import Typography from '@mui/material/Typography';
 
-const drawerWidth = 240;
+const drawerWidth = 280;
 
 const Drawer = styled(MuiDrawer)({
   width: drawerWidth,
@@ -32,17 +32,53 @@ const Drawer = styled(MuiDrawer)({
 export default function SideMenu() {
   const router = useRouter();
 
-  const mainMenuItems = [
-    { text: 'Insights', icon: <BookIcon fontSize="small" />, path: '/insights' },
-    { text: 'Reports', icon: <AssessmentIcon fontSize="small" />, path: '/reports' },
-    { text: 'Documents', icon: <FolderIcon fontSize="small" />, path: '/documents' },
-    { text: 'Research', icon: <SearchIcon fontSize="small" />, path: '/market-research' },
-  ];
-
-  const featureMenuItems = [
-    { text: 'Business', icon: <BusinessIcon fontSize="small" />, path: '/consultant' },
-    { text: 'Wealth', icon: <AccountBalanceIcon fontSize="small" />, path: '/wealthmanager' },
-    { text: 'Team', icon: <GroupsIcon fontSize="small" />, path: '/multiagent' },
+  const menuItems = [
+    {
+      section: 'Core Features',
+      items: [
+        { 
+          text: 'Business Cases', 
+          icon: <BusinessIcon fontSize="small" />, 
+          path: '/consultant',
+          description: 'AI-powered business case analysis'
+        },
+        { 
+          text: 'Market Research', 
+          icon: <SearchIcon fontSize="small" />, 
+          path: '/market-research',
+          description: 'Deep market analysis'
+        },
+        { 
+          text: 'Industry Reports', 
+          icon: <AssessmentIcon fontSize="small" />, 
+          path: '/reports',
+          description: 'Comprehensive reports'
+        }
+      ]
+    },
+    {
+      section: 'Analysis Tools',
+      items: [
+        { 
+          text: 'Market Trends', 
+          icon: <TrendingUpIcon fontSize="small" />, 
+          path: '/market-trends',
+          description: 'Real-time trend analysis'
+        },
+        { 
+          text: 'Competitor Analysis', 
+          icon: <AnalyticsIcon fontSize="small" />, 
+          path: '/competitor-analysis',
+          description: 'Competitor insights'
+        },
+        { 
+          text: 'Team Collaboration', 
+          icon: <GroupsIcon fontSize="small" />, 
+          path: '/multiagent',
+          description: 'Collaborative analysis'
+        }
+      ]
+    }
   ];
 
   const handleNavigation = (path) => {
@@ -61,9 +97,10 @@ export default function SideMenu() {
       {/* Logo Section */}
       <Box
         sx={{
-          mt: 4,
           p: 1.5,
           textAlign: 'center',
+          borderBottom: '1px solid',
+          borderColor: 'divider'
         }}
       >
         <img
@@ -76,75 +113,88 @@ export default function SideMenu() {
         />
       </Box>
 
-      <Divider sx={{ my: 2 }} />
-
-      {/* Main Menu Section */}
-      <Box sx={{ flex: 1, px: 2, py: 1 }}>
-        <List>
-          {mainMenuItems.map((item) => (
-            <ListItem 
-              button 
-              key={item.text} 
-              onClick={() => handleNavigation(item.path)}
-              selected={router.pathname === item.path}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-              <ListItemText
-                primary={item.text}
-                primaryTypographyProps={{
-                  fontSize: '0.875rem',
+      {/* Menu Sections */}
+      <Box sx={{ py: 1 }}>
+        {menuItems.map((section, index) => (
+          <React.Fragment key={section.section}>
+            <Box sx={{ px: 2, py: 0.5 }}>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  color: 'text.secondary',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
                 }}
-              />
-            </ListItem>
-          ))}
-        </List>
+              >
+                {section.section}
+              </Typography>
+            </Box>
+            <List sx={{ py: 0 }}>
+              {section.items.map((item) => (
+                <ListItem 
+                  button 
+                  key={item.text} 
+                  onClick={() => handleNavigation(item.path)}
+                  selected={router.pathname === item.path}
+                  sx={{
+                    py: 0.75,
+                    px: 2,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    }
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+                  <ListItemText
+                    primary={item.text}
+                    secondary={item.description}
+                    primaryTypographyProps={{
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                    }}
+                    secondaryTypographyProps={{
+                      fontSize: '0.75rem',
+                      color: 'text.secondary',
+                    }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+            {index < menuItems.length - 1 && <Divider sx={{ my: 1 }} />}
+          </React.Fragment>
+        ))}
       </Box>
 
-      <Divider />
-
-      {/* Features Section */}
-      <Box sx={{ px: 2, py: 1 }}>
-        <List>
-          {featureMenuItems.map((item) => (
-            <ListItem 
-              button 
-              key={item.text} 
-              onClick={() => handleNavigation(item.path)}
-              selected={router.pathname === item.path}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-              <ListItemText
-                primary={item.text}
-                primaryTypographyProps={{
-                  fontSize: '0.875rem',
-                }}
-              />
-            </ListItem>
-          ))}
-        </List>
-      </Box>
-
-      <Divider />
-
-      {/* History Section */}
-      <Box sx={{ px: 2, py: 1 }}>
-        <List>
-          <ListItem 
-            button 
-            onClick={() => handleNavigation('/history')}
-            selected={router.pathname === '/history'}
-          >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <HistoryIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText
-              primary="History"
-              primaryTypographyProps={{
-                fontSize: '0.875rem',
-              }}
-            />
-          </ListItem>
-        </List>
+      {/* History Section - Fixed at bottom */}
+      <Box sx={{ mt: 'auto', p: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+        <ListItem 
+          button 
+          onClick={() => handleNavigation('/history')}
+          selected={router.pathname === '/history'}
+          sx={{
+            borderRadius: 1,
+            '&:hover': {
+              backgroundColor: 'action.hover',
+            }
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <HistoryIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Analysis History"
+            secondary="View past analyses"
+            primaryTypographyProps={{
+              fontSize: '0.875rem',
+              fontWeight: 500,
+            }}
+            secondaryTypographyProps={{
+              fontSize: '0.75rem',
+              color: 'text.secondary',
+            }}
+          />
+        </ListItem>
       </Box>
     </Drawer>
   );

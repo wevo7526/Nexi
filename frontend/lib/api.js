@@ -10,7 +10,10 @@ export const api = axios.create({
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
-    }
+    },
+    timeout: 30000, // 30 second timeout
+    retries: 3, // Number of retries
+    retryDelay: 1000, // Delay between retries in ms
 });
 
 // Add request interceptor to add auth token
@@ -36,7 +39,24 @@ api.interceptors.response.use(
         }
         return response;
     },
-    (error) => {
+    async (error) => {
+        const config = error.config;
+
+        // If we've already retried the maximum number of times, reject
+        if (!config || !config.retries) {
+            return Promise.reject(error);
+        }
+
+        config.retries -= 1;
+
+        // Create new promise to handle retry delay
+        const delayRetry = new Promise(resolve => {
+            setTimeout(resolve, config.retryDelay || 1000);
+        });
+
+        // Wait for delay then retry
+        await delayRetry;
+
         // Handle network errors or other axios errors
         if (!error.response) {
             if (error.code === 'ECONNREFUSED') {
@@ -50,6 +70,10 @@ api.interceptors.response.use(
             if (error.code === 'ERR_NETWORK') {
                 console.error('Network error. Please check your connection and try again.');
                 return Promise.reject(new Error('Network error. Please check your connection and try again.'));
+            }
+            if (error.code === 'ERR_BAD_RESPONSE') {
+                console.error('Bad response from server');
+                return Promise.reject(new Error('Server error. Please try again later.'));
             }
         }
 
@@ -73,64 +97,6 @@ export const checkApiHealth = async () => {
         return response.data;
     } catch (error) {
         console.error('Health check failed:', error);
-        throw error;
-    }
-};
-
-// Document API functions
-export const uploadDocument = async (file) => {
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await api.post('/api/upload_document', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error('Error uploading document:', error);
-        throw error;
-    }
-};
-
-export const getDocuments = async () => {
-    try {
-        const response = await api.get('/api/get_documents');
-        return response.data;
-    } catch (error) {
-        console.error('Error getting documents:', error);
-        throw error;
-    }
-};
-
-export const deleteDocument = async (documentId) => {
-    try {
-        const response = await api.delete(`/api/delete_document/${documentId}`);
-        return response.data;
-    } catch (error) {
-        console.error('Error deleting document:', error);
-        throw error;
-    }
-};
-
-export const getDocumentStatus = async (documentId) => {
-    try {
-        const response = await api.get(`/api/document_status/${documentId}`);
-        return response.data;
-    } catch (error) {
-        console.error('Error getting document status:', error);
-        throw error;
-    }
-};
-
-export const searchDocuments = async (query) => {
-    try {
-        const response = await api.post('/api/search_documents', { query });
-        return response.data;
-    } catch (error) {
-        console.error('Error searching documents:', error);
         throw error;
     }
 }; 

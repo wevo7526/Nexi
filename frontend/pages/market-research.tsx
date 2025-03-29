@@ -1,12 +1,12 @@
 "use client";
 import React, { useState, useEffect, useRef, FormEvent } from "react";
-import axios from "axios";
 import Sidebar from "../components/Sidebar";
 import { useToast } from "../components/ToastProvider";
 import {
     CircularProgress, Typography, Box, Card, Grid, Button,
     IconButton, TextField, Paper, Avatar, Stack,
-    LinearProgress, Divider, CardContent, Alert
+    LinearProgress, Divider, CardContent, Alert, Container,
+    useTheme, Fade, Tooltip, Chip
 } from "@mui/material";
 import {
     Send,
@@ -18,11 +18,17 @@ import {
     SmartToy,
     Psychology,
     Build,
-    Search
+    Search,
+    History,
+    AutoGraph,
+    Insights
 } from "@mui/icons-material";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
 import { api } from '../lib/api';
+
+// API configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
 
 interface Message {
     role: 'user' | 'assistant' | 'system' | 'thought' | 'action' | 'observation';
@@ -57,11 +63,11 @@ const getRoleColor = (role: Message['role']) => {
         case 'assistant':
             return { bg: 'background.paper', text: 'text.primary' };
         case 'thought':
-            return { bg: '#e3f2fd', text: '#1565c0' }; // Light blue for thoughts
+            return { bg: '#e3f2fd', text: '#1565c0' };
         case 'action':
-            return { bg: '#e8f5e9', text: '#2e7d32' }; // Light green for actions
+            return { bg: '#e8f5e9', text: '#2e7d32' };
         case 'observation':
-            return { bg: '#fff3e0', text: '#e65100' }; // Light orange for observations
+            return { bg: '#fff3e0', text: '#e65100' };
         default:
             return { bg: 'background.paper', text: 'text.primary' };
     }
@@ -92,6 +98,7 @@ export default function MarketResearch() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
     const { showToast } = useToast();
+    const theme = useTheme();
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -119,14 +126,9 @@ export default function MarketResearch() {
 
     const fetchHistory = async () => {
         try {
-            const response = await fetch('/api/market-research/history');
-            if (!response.ok) {
-                throw new Error('Error fetching history');
-            }
-
-            const data: HistoryResponse = await response.json();
-            if (data.status === 'success') {
-                setMessages(data.history.map(msg => ({
+            const response = await api.get('/api/market-research/history');
+            if (response.data.status === 'success') {
+                setMessages(response.data.history.map(msg => ({
                     role: msg.role === 'human' ? 'user' as const : 'assistant' as const,
                     content: msg.content
                 })));
@@ -147,26 +149,15 @@ export default function MarketResearch() {
         setQuery('');
 
         try {
-            console.log('Sending request to backend...');
-            const response = await fetch('/api/market-research/research', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ query: userMessage.content }),
+            const response = await api.post('/api/market-research/research', {
+                query: userMessage.content
+            }, {
+                responseType: 'stream'
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Error response:', errorData);
-                throw new Error(errorData.message || 'Error getting research results');
-            }
-
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error('No reader available');
-
-            let buffer = '';
+            const reader = response.data.getReader();
             const decoder = new TextDecoder();
+            let buffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -177,73 +168,36 @@ export default function MarketResearch() {
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (!line.trim() || !line.startsWith('data: ')) continue;
-                    
+                    if (line.trim() === '') continue;
+                    if (!line.startsWith('data: ')) continue;
+
                     try {
-                        const data: ResearchResponse = JSON.parse(line.slice(6));
-                        console.log('Received message:', data);
+                        const jsonStr = line.slice(6);
+                        const data = JSON.parse(jsonStr);
 
                         if (data.status === 'error') {
-                            console.error('Error in stream:', data.content);
-                            setError(data.content);
-                            continue;
+                            setError(data.message || 'An error occurred');
+                            break;
                         }
 
-                        let role: Message['role'];
-                        let content = data.content.trim();
+                        const message: Message = {
+                            role: data.type as Message['role'],
+                            content: data.content
+                        };
 
-                        // Handle different message types
-                        switch (data.type) {
-                            case 'thought':
-                                role = 'thought';
-                                if (!content.toLowerCase().startsWith('thought:')) {
-                                    content = `Thought: ${content}`;
-                                }
-                                break;
-                            case 'action':
-                                role = 'action';
-                                if (!content.toLowerCase().startsWith('action:')) {
-                                    content = `Action: ${content}`;
-                                }
-                                break;
-                            case 'observation':
-                                role = 'observation';
-                                if (!content.toLowerCase().startsWith('observation:')) {
-                                    content = `Observation: ${content}`;
-                                }
-                                break;
-                            case 'final':
-                                role = 'assistant';
-                                if (!content.toLowerCase().startsWith('final answer:')) {
-                                    content = `Final Answer: ${content}`;
-                                }
-                                break;
-                            default:
-                                console.log('Unknown message type:', data.type);
-                                continue;
-                        }
-
-                        // Only add non-empty messages
-                        if (content.trim()) {
-                            const newMessage: Message = { role, content };
-                            console.log('Adding message:', newMessage);
-                            setMessages(prev => {
-                                // Check if this is a continuation of the previous message
-                                const lastMessage = prev[prev.length - 1];
-                                if (lastMessage && lastMessage.role === role) {
-                                    // Update the last message instead of adding a new one
-                                    const updatedMessages = [...prev];
-                                    updatedMessages[updatedMessages.length - 1] = {
-                                        ...lastMessage,
-                                        content: lastMessage.content + '\n' + content
-                                    };
-                                    return updatedMessages;
-                                }
-                                return [...prev, newMessage];
-                            });
-                        }
-                    } catch (e) {
-                        console.error('Error parsing SSE data:', e, '\nRaw line:', line);
+                        setMessages(prev => {
+                            const lastMessage = prev[prev.length - 1];
+                            if (lastMessage && lastMessage.role === message.role) {
+                                return [
+                                    ...prev.slice(0, -1),
+                                    { ...lastMessage, content: lastMessage.content + '\n' + message.content }
+                                ];
+                            }
+                            return [...prev, message];
+                        });
+                    } catch (err) {
+                        console.error('Error parsing SSE data:', err);
+                        setError('Error processing server response');
                     }
                 }
             }
@@ -259,180 +213,125 @@ export default function MarketResearch() {
         const colors = getRoleColor(message.role);
         const icon = getRoleIcon(message.role);
 
-        // Format the content based on the role
-        let formattedContent = message.content;
-        
-        // Ensure proper formatting for each message type
-        if (!formattedContent.toLowerCase().startsWith(message.role + ':') && 
-            ['thought', 'action', 'observation'].includes(message.role)) {
-            formattedContent = `${message.role.charAt(0).toUpperCase() + message.role.slice(1)}: ${formattedContent}`;
-        }
-
         return (
-            <Card 
-                key={index} 
-                sx={{ 
-                    mb: 2,
-                    bgcolor: colors.bg,
-                    transition: 'all 0.3s ease',
-                    '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: 3
-                    },
-                    borderLeft: message.role !== 'user' ? `4px solid ${colors.text}` : 'none'
-                }}
-            >
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Avatar
+            <Fade in key={index}>
+                <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+                    <Avatar sx={{ bgcolor: colors.bg, color: colors.text }}>
+                        {icon}
+                    </Avatar>
+                    <Box sx={{ flex: 1 }}>
+                        <Paper
+                            elevation={0}
                             sx={{
-                                bgcolor: 'transparent',
-                                width: 28,
-                                height: 28,
-                                mr: 1,
-                                '& .MuiSvgIcon-root': {
-                                    color: colors.text
-                                }
-                            }}
-                        >
-                            {icon}
-                        </Avatar>
-                        <Typography 
-                            variant="caption" 
-                            sx={{ 
-                                textTransform: 'uppercase', 
-                                fontWeight: 'bold',
+                                p: 2,
+                                bgcolor: colors.bg,
                                 color: colors.text,
-                                letterSpacing: '0.5px'
+                                borderRadius: 2,
+                                whiteSpace: 'pre-wrap'
                             }}
                         >
-                            {message.role}
-                        </Typography>
+                            <Typography variant="body1">
+                                {message.content}
+                            </Typography>
+                        </Paper>
                     </Box>
-                    <Typography 
-                        variant="body1" 
-                        component="div" 
-                        sx={{ 
-                            whiteSpace: 'pre-wrap',
-                            pl: 4.5,
-                            color: 'text.primary',
-                            '& code': {
-                                bgcolor: 'rgba(0, 0, 0, 0.04)',
-                                p: 0.5,
-                                borderRadius: 1,
-                                fontFamily: 'monospace'
-                            },
-                            '& ul, & ol': {
-                                pl: 2,
-                                '& li': {
-                                    mb: 1
-                                }
-                            }
-                        }}
-                    >
-                        {formattedContent}
-                    </Typography>
-                </CardContent>
-            </Card>
+                </Box>
+            </Fade>
         );
     };
 
     return (
-        <div className="market-research">
-            <div className="content">
-                <Sidebar />
-                <div className="main-content">
-                    <Box sx={{ mb: 4 }}>
-                        <Typography variant="h4" gutterBottom>
-                            Market Research
-                        </Typography>
-                        <Typography variant="body1" color="text.secondary">
-                            Get comprehensive market research and analysis for your business queries.
-                        </Typography>
-                    </Box>
+        <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+            <Sidebar />
+            <Box sx={{ flex: 1, p: 3, bgcolor: 'background.default' }}>
+                <Container maxWidth="lg">
+                    <Grid container spacing={3}>
+                        <Grid item xs={12}>
+                            <Card sx={{ mb: 3 }}>
+                                <CardContent>
+                                    <Typography variant="h5" gutterBottom>
+                                        Market Research Assistant
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary" paragraph>
+                                        Get detailed market analysis and insights for any industry or company.
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
 
-                    <Card sx={{ mb: 4 }}>
-                        <CardContent>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12}>
-                                    <Paper
-                                        component="form"
-                                        onSubmit={handleSubmit}
-                                        sx={{
-                                            p: 2,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            border: '1px solid',
-                                            borderColor: 'divider',
-                                            borderRadius: 2
-                                        }}
-                                    >
-                                        <TextField
-                                            fullWidth
-                                            value={query}
-                                            onChange={(e) => setQuery(e.target.value)}
-                                            placeholder="Enter your market research query..."
-                                            disabled={loading}
-                                            sx={{ mr: 2 }}
-                                        />
+                        <Grid item xs={12} md={8}>
+                            <Paper sx={{ p: 3, height: 'calc(100vh - 300px)', overflow: 'auto' }}>
+                                {messages.length === 0 ? (
+                                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                                        <Typography variant="h6" color="text.secondary" gutterBottom>
+                                            Start Your Market Research
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Ask questions about market trends, competitors, or industry analysis.
+                                        </Typography>
+                                    </Box>
+                                ) : (
+                                    messages.map((message, index) => renderMessage(message, index))
+                                )}
+                                <div ref={messagesEndRef} />
+                            </Paper>
+                        </Grid>
+
+                        <Grid item xs={12} md={4}>
+                            <Paper sx={{ p: 3 }}>
+                                <Typography variant="h6" gutterBottom>
+                                    Quick Research
+                                </Typography>
+                                <Stack spacing={2}>
+                                    {researchCategories.map((category, index) => (
                                         <Button
-                                            type="submit"
-                                            variant="contained"
-                                            disabled={loading || !query.trim()}
-                                            sx={{ 
-                                                height: '100%',
-                                                px: 4,
-                                                bgcolor: 'primary.main',
-                                                '&:hover': {
-                                                    bgcolor: 'primary.dark'
-                                                }
-                                            }}
+                                            key={index}
+                                            variant="outlined"
+                                            startIcon={category.icon}
+                                            onClick={() => setQuery(category.query)}
+                                            fullWidth
                                         >
-                                            {loading ? <CircularProgress size={24} /> : 'Research'}
+                                            {category.label}
                                         </Button>
-                                    </Paper>
-                                </Grid>
-                            </Grid>
-                        </CardContent>
-                    </Card>
+                                    ))}
+                                </Stack>
+                            </Paper>
+
+                            <Paper sx={{ p: 3, mt: 3 }}>
+                                <form onSubmit={handleSubmit}>
+                                    <TextField
+                                        fullWidth
+                                        multiline
+                                        rows={3}
+                                        value={query}
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        placeholder="Enter your market research query..."
+                                        disabled={loading}
+                                        sx={{ mb: 2 }}
+                                    />
+                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                        <Tooltip title="Send query">
+                                            <IconButton
+                                                type="submit"
+                                                color="primary"
+                                                disabled={loading || !query.trim()}
+                                            >
+                                                {loading ? <CircularProgress size={24} /> : <Send />}
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Box>
+                                </form>
+                            </Paper>
+                        </Grid>
+                    </Grid>
 
                     {error && (
-                        <Alert severity="error" sx={{ mb: 2 }}>
+                        <Alert severity="error" sx={{ mt: 2 }}>
                             {error}
                         </Alert>
                     )}
-
-                    <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-                        {messages.map((message, index) => (
-                            <Box key={index} sx={{ mb: 2 }}>
-                                {renderMessage(message, index)}
-                            </Box>
-                        ))}
-                        <div ref={messagesEndRef} />
-                    </Box>
-                </div>
-            </div>
-
-            <style jsx>{`
-                .market-research {
-                    display: flex;
-                    flex-direction: column;
-                    min-height: 100vh;
-                    background-color: #f5f5f5;
-                }
-                .content {
-                    display: flex;
-                    flex-direction: row;
-                    flex-grow: 1;
-                }
-                .main-content {
-                    flex-grow: 1;
-                    padding: 20px;
-                    background-color: #f5f5f5;
-                    display: flex;
-                    flex-direction: column;
-                }
-            `}</style>
-        </div>
+                </Container>
+            </Box>
+        </Box>
     );
-} 
+}

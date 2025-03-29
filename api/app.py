@@ -1,6 +1,6 @@
 import sys
 import os
-from flask import Flask, request, jsonify, Response, stream_with_context, make_response
+from flask import Flask, request, jsonify, Response, stream_with_context, make_response, send_file
 from flask_cors import CORS
 from dotenv import load_dotenv
 from datetime import datetime
@@ -9,6 +9,11 @@ import json
 import logging
 import traceback
 from werkzeug.utils import secure_filename
+from services.insights_service import InsightsService
+from services.document_service import DocumentService
+from models.market_research_agent import MarketResearchAgent
+from models.business_consultant_agent import BusinessConsultantAgent
+from models.multi_agent_system import MultiAgentSystem
 
 # Get the project root directory (one level up from api directory)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -21,12 +26,9 @@ sys.path.append(PROJECT_ROOT)
 from api.routes.documents import documents_bp
 from api.routes.chat import chat_bp
 from api.routes.market_research import market_research_bp
-from api.routes.market_data import market_data_bp
-from api.services.document_service import DocumentService
+from api.routes.insights import insights_bp
 from models.agent_model import ConsultantAgent
-from models.wealth_manager_agent import WealthManagerAgent
 from models.multi_agent_model import MultiAgentConsultant
-from models.market_research_agent import MarketResearchAgent
 from api.services.supabase_service import SupabaseService
 
 # Print debug information
@@ -48,23 +50,17 @@ def create_app():
     
     # Configure CORS with all necessary options
     CORS(app, 
-         resources={
-             r"/*": {  # Apply to all routes
-                 "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
-                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                 "allow_headers": ["Content-Type", "Authorization"],
-                 "expose_headers": ["Content-Type", "Authorization"],
-                 "supports_credentials": True,
-                 "max_age": 3600
-             }
-         },
-         supports_credentials=True)
+         resources={r"/api/*": {
+             "origins": ["http://localhost:3000"],
+             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+             "allow_headers": ["Content-Type", "Authorization"]
+         }})
 
     # Register blueprints
-    app.register_blueprint(documents_bp)
-    app.register_blueprint(chat_bp)
+    app.register_blueprint(documents_bp, url_prefix='/api/documents')
+    app.register_blueprint(chat_bp, url_prefix='/api/chat')
     app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
-    app.register_blueprint(market_data_bp, url_prefix='/api/market-data')
+    app.register_blueprint(insights_bp, url_prefix='/api/insights')
 
     @app.after_request
     def after_request(response):
@@ -107,9 +103,11 @@ if missing_vars:
 document_service = DocumentService()
 supabase_service = SupabaseService()
 consultant_agent = ConsultantAgent()
-wealth_manager_agent = WealthManagerAgent()
 multi_agent_consultant = MultiAgentConsultant()
 market_research_agent = MarketResearchAgent()
+business_consultant_agent = BusinessConsultantAgent()
+multi_agent_system = MultiAgentSystem()
+insights_service = InsightsService()
 
 # Create a temporary directory for file uploads
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
@@ -119,64 +117,18 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
 
 # Market Research Endpoints
 @app.route('/api/market-research/research', methods=['POST'])
-def conduct_research():
-    """
-    Endpoint to conduct market research based on user query with streaming response
-    """
+async def market_research():
     try:
         data = request.get_json()
-        
-        if not data or 'query' not in data:
-            return jsonify({
-                'status': 'error',
-                'message': 'Query is required'
-            }), 400
-            
-        query = data['query']
+        query = data.get('query')
+        if not query:
+            return jsonify({'error': 'Query is required'}), 400
 
-        def generate():
-            try:
-                for chunk in market_research_agent.research_stream(query):
-                    if chunk.get('status') == 'error':
-                        yield f"data: {json.dumps(chunk)}\n\n"
-                        return
-                    yield f"data: {json.dumps(chunk)}\n\n"
-            except Exception as e:
-                error_data = {
-                    'status': 'error',
-                    'type': 'error',
-                    'message': str(e),
-                    'traceback': traceback.format_exc()
-                }
-                yield f"data: {json.dumps(error_data)}\n\n"
-
-        response = Response(
-            stream_with_context(generate()),
-            mimetype='text/event-stream',
-            headers={
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'X-Accel-Buffering': 'no'
-            }
-        )
-        
-        # Add CORS headers
-        origin = request.headers.get('Origin')
-        if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
-            response.headers['Vary'] = 'Origin'
-            
-        return response
+        response = await market_research_agent.get_answer(query)
+        return jsonify(response)
     except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e),
-            'traceback': traceback.format_exc()
-        }), 500
+        logging.error(f"Error in market research: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/market-research/research', methods=['OPTIONS'])
 def research_options():
@@ -443,101 +395,50 @@ async def get_answer():
             'success': False
         }), 500
 
-@app.route('/get_wealth_answer', methods=['POST'])
-def get_wealth_answer():
-    """
-    Endpoint for WealthManagerAgent with structured output.
-    """
-    data = request.form
-    query = data.get('query')
-    chat_history = data.get('chat_history')
-    thread_id = data.get('thread_id', 'default')
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for the API."""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat()
+    })
 
-    # Handle file upload if present
-    if 'file' in request.files:
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(file_path)
-        docs = wealth_manager_agent.load_document(file_path)
-        context = "\n".join([doc.page_content for doc in docs])
-    else:
-        context = ""
+@app.route('/api/insights', methods=['GET'])
+async def get_insights():
+    try:
+        insights = await insights_service.get_unified_insights()
+        return jsonify(insights)
+    except Exception as e:
+        logging.error(f"Error getting insights: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-    # Call wealth_manager_agent to get a structured response
-    structured_answer = wealth_manager_agent.get_answer(query, chat_history, thread_id, context)
-    return jsonify({'answer': structured_answer})
-
-@app.route('/get_multi_agent_answer', methods=['POST'])
-def get_multi_agent_answer():
-    """
-    Endpoint for MultiAgentConsultant with enhanced report generation.
-    """
+@app.route('/api/consultant/analyze', methods=['POST'])
+async def analyze_business_case():
     try:
         data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No JSON data received'}), 400
-            
+        case_data = data.get('case_data')
+        if not case_data:
+            return jsonify({'error': 'Case data is required'}), 400
+
+        response = await business_consultant_agent.analyze_case(case_data)
+        return jsonify(response)
+    except Exception as e:
+        logging.error(f"Error analyzing business case: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/multi-agent/analyze', methods=['POST'])
+async def multi_agent_analysis():
+    try:
+        data = request.get_json()
         query = data.get('query')
         if not query:
             return jsonify({'error': 'Query is required'}), 400
-            
-        client_info = data.get('client_info', '')
-        thread_id = data.get('thread_id', f'thread_{datetime.now().timestamp()}')
 
-        # Generate the comprehensive report
-        report = multi_agent_consultant.generate_comprehensive_report(query, client_info)
-        
-        if not report:
-            return jsonify({'error': 'Failed to generate report'}), 500
-
-        # Save the report to a file
-        report_filename = f"report_{int(datetime.now().timestamp())}.json"
-        report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
-        
-        with open(report_path, 'w') as f:
-            json.dump(report, f, indent=2)
-
-        # Return the formatted report
-        return jsonify({
-            'answer': report,
-            'report_path': report_path
-        })
-        
+        response = await multi_agent_system.analyze(query)
+        return jsonify(response)
     except Exception as e:
-        logging.error(f"Error in get_multi_agent_answer: {str(e)}")
+        logging.error(f"Error in multi-agent analysis: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-# Health check endpoint
-@app.route('/api/health', methods=['GET', 'OPTIONS'])
-def health_check():
-    if request.method == 'OPTIONS':
-        # Handle preflight request
-        response = make_response()
-        origin = request.headers.get('Origin')
-        if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
-            response.headers['Vary'] = 'Origin'
-        return response
-
-    try:
-        return jsonify({
-            'status': 'ok',
-            'message': 'API is healthy',
-            'timestamp': datetime.utcnow().isoformat()
-        })
-    except Exception as e:
-        logging.error(f"Health check error: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
 
 if __name__ == '__main__':
     print("Starting Flask server...")
