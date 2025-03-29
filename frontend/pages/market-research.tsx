@@ -6,7 +6,7 @@ import {
     CircularProgress, Typography, Box, Card, Grid, Button,
     IconButton, TextField, Paper, Avatar, Stack,
     LinearProgress, Divider, CardContent, Alert, Container,
-    useTheme, Fade, Tooltip, Chip
+    useTheme, Fade, Tooltip, Chip, InputAdornment
 } from "@mui/material";
 import {
     Send,
@@ -21,7 +21,8 @@ import {
     Search,
     History,
     AutoGraph,
-    Insights
+    Insights,
+    Search as SearchIcon
 } from "@mui/icons-material";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
@@ -255,12 +256,68 @@ export default function MarketResearch() {
                                     <Typography variant="body2" color="text.secondary" paragraph>
                                         Get detailed market analysis and insights for any industry or company.
                                     </Typography>
+                                    
+                                    <form onSubmit={handleSubmit}>
+                                        <TextField
+                                            fullWidth
+                                            multiline
+                                            rows={2}
+                                            value={query}
+                                            onChange={(e) => setQuery(e.target.value)}
+                                            placeholder="Enter your market research query..."
+                                            disabled={loading}
+                                            sx={{ mb: 2 }}
+                                            InputProps={{
+                                                startAdornment: (
+                                                    <InputAdornment position="start">
+                                                        <SearchIcon color="action" />
+                                                    </InputAdornment>
+                                                ),
+                                                endAdornment: (
+                                                    <InputAdornment position="end">
+                                                        <Tooltip title="Send query">
+                                                            <IconButton
+                                                                type="submit"
+                                                                color="primary"
+                                                                disabled={loading || !query.trim()}
+                                                            >
+                                                                {loading ? <CircularProgress size={24} /> : <Send />}
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </InputAdornment>
+                                                ),
+                                            }}
+                                        />
+                                    </form>
+
+                                    <Box sx={{ mt: 2 }}>
+                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                            Quick Research Templates
+                                        </Typography>
+                                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                            {researchCategories.map((category, index) => (
+                                                <Chip
+                                                    key={index}
+                                                    icon={category.icon}
+                                                    label={category.label}
+                                                    onClick={() => setQuery(category.query)}
+                                                    sx={{
+                                                        m: 0.5,
+                                                        '&:hover': {
+                                                            bgcolor: 'primary.light',
+                                                            color: 'primary.main'
+                                                        }
+                                                    }}
+                                                />
+                                            ))}
+                                        </Stack>
+                                    </Box>
                                 </CardContent>
                             </Card>
                         </Grid>
 
-                        <Grid item xs={12} md={8}>
-                            <Paper sx={{ p: 3, height: 'calc(100vh - 300px)', overflow: 'auto' }}>
+                        <Grid item xs={12}>
+                            <Paper sx={{ p: 3, height: 'calc(100vh - 250px)', overflow: 'auto' }}>
                                 {messages.length === 0 ? (
                                     <Box sx={{ textAlign: 'center', py: 4 }}>
                                         <Typography variant="h6" color="text.secondary" gutterBottom>
@@ -274,53 +331,6 @@ export default function MarketResearch() {
                                     messages.map((message, index) => renderMessage(message, index))
                                 )}
                                 <div ref={messagesEndRef} />
-                            </Paper>
-                        </Grid>
-
-                        <Grid item xs={12} md={4}>
-                            <Paper sx={{ p: 3 }}>
-                                <Typography variant="h6" gutterBottom>
-                                    Quick Research
-                                </Typography>
-                                <Stack spacing={2}>
-                                    {researchCategories.map((category, index) => (
-                                        <Button
-                                            key={index}
-                                            variant="outlined"
-                                            startIcon={category.icon}
-                                            onClick={() => setQuery(category.query)}
-                                            fullWidth
-                                        >
-                                            {category.label}
-                                        </Button>
-                                    ))}
-                                </Stack>
-                            </Paper>
-
-                            <Paper sx={{ p: 3, mt: 3 }}>
-                                <form onSubmit={handleSubmit}>
-                                    <TextField
-                                        fullWidth
-                                        multiline
-                                        rows={3}
-                                        value={query}
-                                        onChange={(e) => setQuery(e.target.value)}
-                                        placeholder="Enter your market research query..."
-                                        disabled={loading}
-                                        sx={{ mb: 2 }}
-                                    />
-                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                        <Tooltip title="Send query">
-                                            <IconButton
-                                                type="submit"
-                                                color="primary"
-                                                disabled={loading || !query.trim()}
-                                            >
-                                                {loading ? <CircularProgress size={24} /> : <Send />}
-                                            </IconButton>
-                                        </Tooltip>
-                                    </Box>
-                                </form>
                             </Paper>
                         </Grid>
                     </Grid>

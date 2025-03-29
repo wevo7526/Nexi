@@ -115,53 +115,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
 
-# Market Research Endpoints
-@app.route('/api/market-research/research', methods=['POST'])
-async def market_research():
-    try:
-        data = request.get_json()
-        query = data.get('query')
-        if not query:
-            return jsonify({'error': 'Query is required'}), 400
-
-        response = await market_research_agent.get_answer(query)
-        return jsonify(response)
-    except Exception as e:
-        logging.error(f"Error in market research: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/market-research/research', methods=['OPTIONS'])
-def research_options():
-    """Handle OPTIONS requests for CORS"""
-    response = make_response()
-    origin = request.headers.get('Origin')
-    if origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
-        response.headers['Vary'] = 'Origin'
-    return response
-
-@app.route('/api/market-research/history', methods=['GET'])
-def get_research_history():
-    """
-    Endpoint to retrieve market research chat history
-    """
-    try:
-        history = market_research_agent.get_chat_history()
-        return jsonify({
-            'status': 'success',
-            'history': history
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e),
-            'traceback': traceback.format_exc()
-        }), 500
-
 @app.route('/api/get_documents', methods=['GET'])
 async def get_documents():
     """Get all documents for the current user."""

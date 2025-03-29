@@ -9,6 +9,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 import json
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
@@ -271,4 +272,87 @@ Question: {input}
                 "content": msg.content
             }
             for msg in self.chat_history[-5:]  # Only return last 5 messages
-        ] 
+        ]
+
+    def get_market_trends(self) -> Dict[str, Any]:
+        """
+        Get current market trends and insights.
+        
+        Returns:
+            Dict[str, Any]: Market trends and insights data
+        """
+        try:
+            print("\n📊 Analyzing market trends...")
+            
+            # Define trend categories and their search queries
+            trend_queries = {
+                'Overall Market': 'current market trends and economic indicators 2024',
+                'Industry Specific': 'industry growth rates and market size 2024',
+                'Consumer Behavior': 'consumer spending trends and preferences 2024',
+                'Economic Indicators': 'GDP growth, inflation, and interest rates 2024'
+            }
+            
+            trends = []
+            insights = []
+            
+            for category, query in trend_queries.items():
+                # Search for trend data
+                search_result = self.search.run(query)
+                
+                # Analyze the search result to determine trend direction and value
+                analysis_prompt = f"""Analyze the following market data and provide:
+1. The current value or metric
+2. The trend direction (up/down/stable)
+3. The percentage change
+4. A brief description
+
+Data: {search_result}
+
+Format the response as JSON with these fields:
+{{
+    "value": "string",
+    "trend": "up/down/stable",
+    "change": "string",
+    "description": "string"
+}}"""
+
+                analysis = self.llm.invoke(analysis_prompt)
+                trend_data = json.loads(analysis)
+                trend_data['category'] = category
+                trends.append(trend_data)
+                
+                # Generate insights based on the trend
+                insight_prompt = f"""Based on this market trend:
+{json.dumps(trend_data, indent=2)}
+
+Generate a key insight with:
+1. A clear title
+2. A detailed description
+3. The impact level (high/medium/low)
+4. The category
+
+Format the response as JSON with these fields:
+{{
+    "title": "string",
+    "description": "string",
+    "impact": "high/medium/low",
+    "category": "string"
+}}"""
+
+                insight = self.llm.invoke(insight_prompt)
+                insight_data = json.loads(insight)
+                insight_data['date'] = datetime.now().isoformat()
+                insights.append(insight_data)
+            
+            return {
+                'status': 'success',
+                'trends': trends,
+                'insights': insights
+            }
+            
+        except Exception as e:
+            print(f"Error getting market trends: {str(e)}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            } 
