@@ -54,24 +54,18 @@ export default function SideMenu() {
           icon: <DescriptionIcon fontSize="small" />, 
           path: '/reports',
           description: 'Generate and manage reports'
+        },
+        {
+          text: 'Case Solver',
+          path: "/business-case",
+          icon: <AssessmentIcon />,
+          description: "Case analysis and solutions"
         }
       ]
     },
     {
       section: 'Analysis Tools',
       items: [
-        { 
-          text: 'Market Trends', 
-          icon: <TrendingUpIcon fontSize="small" />, 
-          path: '/market-trends',
-          description: 'Real-time trend analysis'
-        },
-        { 
-          text: 'Competitor Analysis', 
-          icon: <AnalyticsIcon fontSize="small" />, 
-          path: '/competitor-analysis',
-          description: 'Competitor insights'
-        },
         { 
           text: 'Team Collaboration', 
           icon: <GroupsIcon fontSize="small" />, 

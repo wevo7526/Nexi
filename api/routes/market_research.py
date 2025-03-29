@@ -97,37 +97,4 @@ def get_history():
             'status': 'error',
             'message': str(e),
             'traceback': traceback.format_exc()
-        }), 500
-
-@market_research_bp.route('/trends', methods=['GET'])
-def get_trends():
-    """
-    Endpoint to get current market trends and insights
-    """
-    try:
-        if agent is None:
-            return jsonify({
-                'status': 'error',
-                'message': 'Market Research Agent not initialized properly'
-            }), 500
-
-        trends_data = agent.get_market_trends()
-        return jsonify(trends_data)
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e),
-            'traceback': traceback.format_exc()
-        }), 500
-
-@market_research_bp.route('/trends', methods=['OPTIONS'])
-def trends_options():
-    """Handle OPTIONS requests for CORS"""
-    return Response(
-        '',
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
-        }
-    ) 
+        }), 500 

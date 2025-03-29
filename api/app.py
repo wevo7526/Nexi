@@ -33,6 +33,7 @@ from api.services.supabase_service import SupabaseService
 from api.routes.reports import reports_bp
 from api.routes.multi_agent import multi_agent_bp
 from api.routes.report_generator import report_generator_bp
+from api.routes.business_case import business_case_bp
 
 # Print debug information
 print(f"Current working directory: {os.getcwd()}")
@@ -86,6 +87,7 @@ def create_app():
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
     app.register_blueprint(multi_agent_bp)
     app.register_blueprint(report_generator_bp, url_prefix='/api/report-generator')
+    app.register_blueprint(business_case_bp, url_prefix='/api/business-case')
 
     return app
 
