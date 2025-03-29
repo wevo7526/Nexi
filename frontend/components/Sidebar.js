@@ -14,6 +14,7 @@ import AnalyticsIcon from '@mui/icons-material/Analytics';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GroupsIcon from '@mui/icons-material/Groups';
 import HistoryIcon from '@mui/icons-material/History';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { useRouter } from 'next/router';
 import Typography from '@mui/material/Typography';
 
@@ -37,10 +38,10 @@ export default function SideMenu() {
       section: 'Core Features',
       items: [
         { 
-          text: 'Business Cases', 
+          text: 'Company Analysis', 
           icon: <BusinessIcon fontSize="small" />, 
           path: '/consultant',
-          description: 'AI-powered business case analysis'
+          description: 'AI-powered insights'
         },
         { 
           text: 'Market Research', 
@@ -49,10 +50,10 @@ export default function SideMenu() {
           description: 'Deep market analysis'
         },
         { 
-          text: 'Industry Reports', 
-          icon: <AssessmentIcon fontSize="small" />, 
+          text: 'Reports', 
+          icon: <DescriptionIcon fontSize="small" />, 
           path: '/reports',
-          description: 'Comprehensive reports'
+          description: 'Generate and manage reports'
         }
       ]
     },

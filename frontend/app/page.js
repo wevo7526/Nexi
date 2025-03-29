@@ -26,13 +26,7 @@ export default function Home() {
                     </div>
                     <div className="button-group">
                         <a href="/auth?redirectTo=/consultant" className="button-link">
-                            <button className="button">Consultant</button>
-                        </a>
-                        <a href="/auth?redirectTo=/wealthmanager" className="button-link">
-                            <button className="button">Wealth Manager</button>
-                        </a>
-                        <a href="/auth?redirectTo=/multiagent" className="button-link">
-                            <button className="button">Team</button>
+                            <button className="button">Enter</button>
                         </a>
                     </div>
                     <p className="footer">Powered by Langchain + Anthropic</p>
@@ -68,7 +62,7 @@ export default function Home() {
                     flex-direction: column;
                     align-items: stretch;
                     width: 100%;
-                    gap: 1.25rem;
+                    max-width: 200px;
                 }
 
                 .button-link {
@@ -78,9 +72,9 @@ export default function Home() {
 
                 .button {
                     width: 100%;
-                    padding: 1rem;
-                    font-size: 1.125rem;
-                    font-weight: 500;
+                    padding: 1.25rem;
+                    font-size: 1.25rem;
+                    font-weight: 600;
                     color: #1a1a1a;
                     background: #ffffff;
                     border: 2px solid #1a1a1a;
@@ -97,7 +91,7 @@ export default function Home() {
                 .button:hover {
                     background: #1a1a1a;
                     color: white;
-                    transform: translateY(-1px);
+                    transform: translateY(-2px);
                 }
 
                 .button:active {
@@ -122,13 +116,9 @@ export default function Home() {
                     }
 
                     .button {
-                        padding: 0.875rem;
-                        font-size: 1rem;
+                        padding: 1rem;
+                        font-size: 1.125rem;
                         -webkit-touch-callout: none;
-                    }
-
-                    .button-group {
-                        gap: 1rem;
                     }
                 }
             `}</style>

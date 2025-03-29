@@ -1,24 +1,32 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { Snackbar, Alert } from '@mui/material';
 
-const ToastContext = createContext({
+interface ToastContextType {
+    showToast: (message: string, severity?: 'success' | 'error' | 'warning' | 'info') => void;
+}
+
+const ToastContext = createContext<ToastContextType>({
     showToast: () => {},
 });
 
 export const useToast = () => useContext(ToastContext);
 
-export function ToastProvider({ children }) {
+interface ToastProviderProps {
+    children: React.ReactNode;
+}
+
+export function ToastProvider({ children }: ToastProviderProps) {
     const [open, setOpen] = useState(false);
     const [message, setMessage] = useState('');
-    const [severity, setSeverity] = useState('success');
+    const [severity, setSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('success');
 
-    const showToast = useCallback((message, severity = 'success') => {
+    const showToast = useCallback((message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
         setMessage(message);
         setSeverity(severity);
         setOpen(true);
     }, []);
 
-    const handleClose = (event, reason) => {
+    const handleClose = (event: React.SyntheticEvent | Event, reason?: string) => {
         if (reason === 'clickaway') return;
         setOpen(false);
     };

@@ -10,7 +10,7 @@ class ProfileCreationAgent:
     def __init__(self):
         self.llm = ChatAnthropic(
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-            model="claude-2",
+            model="claude-3-5-sonnet-20240620",
             temperature=0.7
         )
         

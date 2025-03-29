@@ -114,7 +114,7 @@ class MarketResearchAgent:
         
         # Initialize the language model
         self.llm = ChatAnthropic(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-sonnet-20240620",
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             temperature=0.7,
             streaming=True,

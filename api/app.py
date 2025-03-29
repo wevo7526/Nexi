@@ -30,6 +30,9 @@ from api.routes.insights import insights_bp
 from models.agent_model import ConsultantAgent
 from models.multi_agent_model import MultiAgentConsultant
 from api.services.supabase_service import SupabaseService
+from api.routes.reports import reports_bp
+from api.routes.multi_agent import multi_agent_bp
+from api.routes.report_generator import report_generator_bp
 
 # Print debug information
 print(f"Current working directory: {os.getcwd()}")
@@ -48,20 +51,7 @@ print(f"ANTHROPIC_API_KEY exists: {'Yes' if os.getenv('ANTHROPIC_API_KEY') else 
 def create_app():
     app = Flask(__name__)
     
-    # Configure CORS with all necessary options
-    CORS(app, 
-         resources={r"/api/*": {
-             "origins": ["http://localhost:3000"],
-             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-             "allow_headers": ["Content-Type", "Authorization"]
-         }})
-
-    # Register blueprints
-    app.register_blueprint(documents_bp, url_prefix='/api/documents')
-    app.register_blueprint(chat_bp, url_prefix='/api/chat')
-    app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
-    app.register_blueprint(insights_bp, url_prefix='/api/insights')
-
+    # Configure CORS
     @app.after_request
     def after_request(response):
         origin = request.headers.get('Origin')
@@ -87,6 +77,15 @@ def create_app():
                 response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
                 response.headers['Vary'] = 'Origin'
             return response
+
+    # Register blueprints
+    app.register_blueprint(documents_bp, url_prefix='/api/documents')
+    app.register_blueprint(chat_bp, url_prefix='/api/chat')
+    app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
+    app.register_blueprint(insights_bp, url_prefix='/api/insights')
+    app.register_blueprint(reports_bp, url_prefix='/api/reports')
+    app.register_blueprint(multi_agent_bp)
+    app.register_blueprint(report_generator_bp, url_prefix='/api/report-generator')
 
     return app
 

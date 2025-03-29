@@ -1,15 +1,17 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import Sidebar from "../components/Sidebar";
 import { useTheme } from '@mui/material/styles';
 import {
     CircularProgress, Box, Typography, Card, Grid, Button,
-    TextField, useMediaQuery
+    TextField, useMediaQuery, Paper, Avatar, Stack, Divider,
+    IconButton, Tooltip, Fade, List, ListItem, ListItemIcon, ListItemText, Alert
 } from "@mui/material";
-import { Send } from "@mui/icons-material";
+import { Send, Save, Download } from "@mui/icons-material";
 import { createClient } from '@supabase/supabase-js';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
 const supabase = createClient(
@@ -20,430 +22,161 @@ const supabase = createClient(
 function MultiAgentConsultant() {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const [query, setQuery] = useState("");
-    const [clientInfo, setClientInfo] = useState("");
-    const [report, setReport] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [report, setReport] = useState(null);
+    const messagesEndRef = useRef(null);
+    const [currentStatus, setCurrentStatus] = useState(null);
+    const [currentAgent, setCurrentAgent] = useState(null);
+    const [reportSections, setReportSections] = useState({
+        strategy: null,
+        market: null,
+        financial: null,
+        implementation: null
+    });
 
-    const generateDocx = async (reportData) => {
-        console.log("Report Data:", reportData);
-
-        if (!reportData || !reportData.report_meta) {
-            throw new Error("Invalid report data structure");
-        }
-
-        const doc = new Document({
-            sections: [{
-                properties: {
-                    page: {
-                        margin: {
-                            top: 1440,
-                            right: 1440,
-                            bottom: 1440,
-                            left: 1440,
-                            header: 720,
-                            footer: 720,
-                            gutter: 0
-                        }
-                    }
-                },
-                children: [
-                    // Header
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_1,
-                        spacing: {
-                            after: 400,
-                            line: 360
-                        },
-                        children: [
-                            new TextRun({
-                                text: "CONSULTING REPORT",
-                                size: 32,
-                                font: "Calibri"
-                            })
-                        ]
-                    }),
-                    
-                    // Report Info
-                    new Paragraph({
-                        spacing: { after: 200 },
-                        children: [
-                            new TextRun({
-                                text: `Generated on: ${new Date(reportData.report_meta.generated_date).toLocaleDateString()}`
-                            })
-                        ]
-                    }),
-                    new Paragraph({
-                        spacing: { after: 400 },
-                        children: [
-                            new TextRun({
-                                text: `Client: ${reportData.report_meta.client}`
-                            })
-                        ]
-                    }),
-
-                    // Executive Summary
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_2,
-                        spacing: { before: 400, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Executive Summary"
-                            })
-                        ]
-                    }),
-                    new Paragraph({
-                        spacing: { after: 400 },
-                        children: [
-                            new TextRun({
-                                text: "This report provides a comprehensive analysis and recommendations based on the client's requirements. The findings are organized into strategic analysis, market research, financial analysis, and implementation roadmap sections."
-                            })
-                        ]
-                    }),
-
-                    // Key Findings
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_3,
-                        spacing: { before: 400, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Key Findings"
-                            })
-                        ]
-                    }),
-                    ...(reportData.executive_summary?.key_findings || []).map(finding =>
-                        new Paragraph({
-                            spacing: { after: 100 },
-                            children: [
-                                new TextRun({
-                                    text: `• ${finding}`
-                                })
-                            ]
-                        })
-                    ),
-
-                    // Strategic Analysis
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_2,
-                        spacing: { before: 400, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Strategic Analysis"
-                            })
-                        ]
-                    }),
-                    ...Object.entries(reportData.strategic_analysis || {}).map(([key, value]) => [
-                        new Paragraph({
-                            heading: HeadingLevel.HEADING_3,
-                            spacing: { before: 300, after: 200 },
-                            children: [
-                                new TextRun({
-                                    text: key.split('_').map(word => 
-                                        word.charAt(0).toUpperCase() + word.slice(1)
-                                    ).join(' ')
-                                })
-                            ]
-                        }),
-                        ...(Array.isArray(value) 
-                            ? value.map(item => new Paragraph({
-                                spacing: { after: 100 },
-                                children: [
-                                    new TextRun({
-                                        text: `• ${item}`
-                                    })
-                                ]
-                            }))
-                            : [new Paragraph({
-                                spacing: { after: 200 },
-                                children: [
-                                    new TextRun({
-                                        text: value
-                                    })
-                                ]
-                            })]
-                        )
-                    ]).flat(),
-
-                    // Market Analysis
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_2,
-                        spacing: { before: 400, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Market Analysis"
-                            })
-                        ]
-                    }),
-                    ...Object.entries(reportData.market_analysis || {}).map(([key, value]) => [
-                        new Paragraph({
-                            heading: HeadingLevel.HEADING_3,
-                            spacing: { before: 300, after: 200 },
-                            children: [
-                                new TextRun({
-                                    text: key.split('_').map(word => 
-                                        word.charAt(0).toUpperCase() + word.slice(1)
-                                    ).join(' ')
-                                })
-                            ]
-                        }),
-                        ...(Array.isArray(value) 
-                            ? value.map(item => new Paragraph({
-                                spacing: { after: 100 },
-                                children: [
-                                    new TextRun({
-                                        text: `• ${item}`
-                                    })
-                                ]
-                            }))
-                            : [new Paragraph({
-                                spacing: { after: 200 },
-                                children: [
-                                    new TextRun({
-                                        text: value
-                                    })
-                                ]
-                            })]
-                        )
-                    ]).flat(),
-
-                    // Financial Analysis
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_2,
-                        spacing: { before: 400, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Financial Analysis"
-                            })
-                        ]
-                    }),
-                    ...Object.entries(reportData.financial_analysis || {}).map(([key, value]) => [
-                        new Paragraph({
-                            heading: HeadingLevel.HEADING_3,
-                            spacing: { before: 300, after: 200 },
-                            children: [
-                                new TextRun({
-                                    text: key.split('_').map(word => 
-                                        word.charAt(0).toUpperCase() + word.slice(1)
-                                    ).join(' ')
-                                })
-                            ]
-                        }),
-                        ...(Array.isArray(value) 
-                            ? value.map(item => new Paragraph({
-                                spacing: { after: 100 },
-                                children: [
-                                    new TextRun({
-                                        text: `• ${item}`
-                                    })
-                                ]
-                            }))
-                            : [new Paragraph({
-                                spacing: { after: 200 },
-                                children: [
-                                    new TextRun({
-                                        text: value
-                                    })
-                                ]
-                            })]
-                        )
-                    ]).flat(),
-
-                    // Implementation Roadmap
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_2,
-                        spacing: { before: 400, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Implementation Roadmap"
-                            })
-                        ]
-                    }),
-                    ...Object.entries(reportData.implementation_roadmap || {}).map(([key, value]) => [
-                        new Paragraph({
-                            heading: HeadingLevel.HEADING_3,
-                            spacing: { before: 300, after: 200 },
-                            children: [
-                                new TextRun({
-                                    text: key.split('_').map(word => 
-                                        word.charAt(0).toUpperCase() + word.slice(1)
-                                    ).join(' ')
-                                })
-                            ]
-                        }),
-                        ...(Array.isArray(value) 
-                            ? value.map(item => new Paragraph({
-                                spacing: { after: 100 },
-                                children: [
-                                    new TextRun({
-                                        text: `• ${item}`
-                                    })
-                                ]
-                            }))
-                            : [new Paragraph({
-                                spacing: { after: 200 },
-                                children: [
-                                    new TextRun({
-                                        text: value
-                                    })
-                                ]
-                            })]
-                        )
-                    ]).flat(),
-
-                    // Appendix
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_2,
-                        spacing: { before: 400, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Appendix"
-                            })
-                        ]
-                    }),
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_3,
-                        spacing: { before: 300, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Methodology"
-                            })
-                        ]
-                    }),
-                    ...(reportData.appendix?.methodology || []).map(item =>
-                        new Paragraph({
-                            spacing: { after: 100 },
-                            children: [
-                                new TextRun({
-                                    text: `• ${item}`
-                                })
-                            ]
-                        })
-                    ),
-                    new Paragraph({
-                        heading: HeadingLevel.HEADING_3,
-                        spacing: { before: 300, after: 200 },
-                        children: [
-                            new TextRun({
-                                text: "Data Sources"
-                            })
-                        ]
-                    }),
-                    ...(reportData.appendix?.data_sources || []).map(source =>
-                        new Paragraph({
-                            spacing: { after: 100 },
-                            children: [
-                                new TextRun({
-                                    text: `• ${source}`
-                                })
-                            ]
-                        })
-                    ),
-
-                    // Footer
-                    new Paragraph({
-                        spacing: { before: 800 },
-                        children: [
-                            new TextRun({
-                                text: "Confidential - For Internal Use Only",
-                                color: "666666",
-                                size: 20
-                            })
-                        ]
-                    })
-                ],
-            }],
-        });
-
-        const blob = await Packer.toBlob(doc);
-        return blob;
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    const saveReportToSupabase = async (reportData, docxBlob) => {
-        const fileName = `report_${Date.now()}.docx`;
-        
-        try {
-            // Upload DOCX file to Supabase Storage
-            const { data, error } = await supabase.storage
-                .from('reports')
-                .upload(fileName, docxBlob, {
-                    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    cacheControl: '3600',
-                    upsert: false
-                });
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
-            if (error) {
-                console.error('Upload error:', error);
-                throw new Error(`Failed to upload report: ${error.message}`);
-            }
+    const handleSend = async () => {
+        if (!input.trim() || loading) return;
 
-            // Get the public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('reports')
-                .getPublicUrl(fileName);
+        const userMessage = {
+            role: 'user',
+            content: input,
+            timestamp: new Date().toISOString()
+        };
 
-            console.log('File uploaded successfully:', publicUrl);
-            return fileName;
-        } catch (error) {
-            console.error('Error in saveReportToSupabase:', error);
-            throw error;
-        }
-    };
-
-    const handleGenerateReport = async (e) => {
-        if (e) e.preventDefault();
-        if (loading || !query.trim()) return;
-
+        setMessages(prev => [...prev, userMessage]);
+        setInput("");
         setLoading(true);
         setError(null);
-        
+        setCurrentStatus(null);
+        setCurrentAgent(null);
+        setReportSections({
+            strategy: null,
+            market: null,
+            financial: null,
+            implementation: null
+        });
+
         try {
-            const response = await axios.post(`${API_BASE_URL}/get_multi_agent_answer`, {
-                query: query.trim(),
-                client_info: clientInfo.trim(),
-                thread_id: `report_${Date.now()}`,
-                chat_history: []
-            });
-            
-            if (response.data.error) {
-                throw new Error(response.data.error);
-            }
-            
-            if (!response.data.answer) {
-                throw new Error("No response received from the server");
-            }
-            
-            const reportData = {
-                report_meta: {
-                    generated_date: new Date().toISOString(),
-                    client: clientInfo || "Confidential",
-                    version: "1.0"
+            const response = await fetch(`${API_BASE_URL}/api/multi-agent/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
                 },
-                ...response.data.answer
-            };
+                body: JSON.stringify({
+                    message: input,
+                    client_info: {
+                        name: "Client",
+                        industry: "Technology",
+                        size: "Enterprise"
+                    }
+                })
+            });
 
-            setReport(reportData);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
-            // Generate DOCX report
-            const docxBlob = await generateDocx(reportData);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let assistantMessage = null;
 
-            // Save to Supabase Storage
-            const fileName = await saveReportToSupabase(reportData, docxBlob);
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            // Download report
-            const url = window.URL.createObjectURL(docxBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep the last incomplete line in the buffer
 
-        } catch (error) {
-            console.error("Error:", error);
-            setError(error.response?.data?.error || error.message || "Failed to generate report");
-        } finally {
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataStr = line.slice(6);
+                        if (dataStr === '[DONE]') {
+                            setLoading(false);
+                            if (assistantMessage) {
+                                setMessages(prev => [...prev, assistantMessage]);
+                            }
+                            continue;
+                        }
+
+                        try {
+                            const data = JSON.parse(dataStr);
+                            
+                            if (data.type === 'status') {
+                                setCurrentStatus(data.content);
+                                setCurrentAgent(data.agent);
+                            } else if (data.type === 'content') {
+                                setReportSections(prev => ({
+                                    ...prev,
+                                    [data.section]: data.content
+                                }));
+                            } else if (data.type === 'report') {
+                                setReport(data.content);
+                                // Create a structured message from the report
+                                assistantMessage = {
+                                    role: 'assistant',
+                                    content: data.content,
+                                    sections: [
+                                        {
+                                            title: 'Executive Summary',
+                                            content: data.content.executive_summary.overview || []
+                                        },
+                                        {
+                                            title: 'Key Findings',
+                                            content: data.content.executive_summary.key_findings || []
+                                        },
+                                        {
+                                            title: 'Market Highlights',
+                                            content: data.content.executive_summary.market_highlights || []
+                                        },
+                                        {
+                                            title: 'Financial Highlights',
+                                            content: data.content.executive_summary.financial_highlights || []
+                                        },
+                                        {
+                                            title: 'Strategic Analysis',
+                                            content: data.content.strategic_analysis.strategic_recommendations || []
+                                        },
+                                        {
+                                            title: 'Market Analysis',
+                                            content: data.content.market_analysis.market_opportunities || []
+                                        },
+                                        {
+                                            title: 'Implementation Roadmap',
+                                            content: data.content.implementation_roadmap.phases || []
+                                        }
+                                    ].filter(section => section.content.length > 0),
+                                    timestamp: new Date().toISOString()
+                                };
+                                setLoading(false);
+                            } else if (data.type === 'error') {
+                                setError(data.content);
+                                setLoading(false);
+                            }
+                        } catch (parseError) {
+                            console.error('Error parsing SSE data:', parseError);
+                            console.error('Raw data:', dataStr);
+                            setError('Error parsing server response');
+                            setLoading(false);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error in handleSend:', err);
+            setError(err.message || 'Failed to get response');
             setLoading(false);
         }
     };
@@ -451,7 +184,31 @@ function MultiAgentConsultant() {
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            handleGenerateReport();
+            handleSend();
+        }
+    };
+
+    const handleSaveReport = async () => {
+        if (!report) return;
+
+        try {
+            const { data, error } = await supabase
+                .from('reports')
+                .insert([
+                    {
+                        title: report.title || 'Generated Report',
+                        content: report.content,
+                        status: 'completed',
+                        created_at: new Date().toISOString(),
+                        completed_at: new Date().toISOString()
+                    }
+                ]);
+
+            if (error) throw error;
+            alert('Report saved successfully!');
+        } catch (err) {
+            console.error('Error saving report:', err);
+            alert('Failed to save report');
         }
     };
 
@@ -460,64 +217,142 @@ function MultiAgentConsultant() {
             <div className="content">
                 <Sidebar />
                 <div className="main-content">
-                    <Card sx={{ mb: 3, p: 3 }}>
-                        <Typography variant="h5" gutterBottom>
-                            Generate Comprehensive Consulting Report
-                        </Typography>
-                        <Grid container spacing={3}>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    multiline
-                                    rows={3}
-                                    value={query}
-                                    onChange={(e) => setQuery(e.target.value)}
-                                    onKeyPress={handleKeyPress}
-                                    placeholder="Enter your business query or challenge..."
-                                    variant="outlined"
-                                    disabled={loading}
-                                />
+                    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                            <Typography variant="h5" gutterBottom>
+                                Team Collaboration
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Chat with our AI team of experts for comprehensive analysis and insights
+                            </Typography>
+                        </Box>
+
+                        {/* Status Display */}
+                        {currentStatus && (
+                            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                                <Paper sx={{ p: 2, bgcolor: 'background.default' }}>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                        <CircularProgress size={20} />
+                                        <Box>
+                                            <Typography variant="subtitle2" color="primary">
+                                                {currentAgent.charAt(0).toUpperCase() + currentAgent.slice(1)} Agent
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {currentStatus}
+                                            </Typography>
+                                        </Box>
+                                    </Stack>
+                                </Paper>
+                            </Box>
+                        )}
+
+                        {/* Messages Area */}
+                        <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+                            {messages.map((message, index) => (
+                                <Box key={index} sx={{ mb: 2 }}>
+                                    <Typography
+                                        variant="subtitle2"
+                                        color="text.secondary"
+                                        gutterBottom
+                                    >
+                                        {message.role === 'user' ? 'You' : 'AI Team'}
+                                    </Typography>
+                                    <Paper
+                                        sx={{
+                                            p: 2,
+                                            backgroundColor: message.role === 'user' ? 'background.paper' : 'background.default',
+                                            border: 1,
+                                            borderColor: 'divider'
+                                        }}
+                                    >
+                                        {message.sections ? (
+                                            // Render structured sections
+                                            message.sections.map((section, sectionIndex) => (
+                                                <Box key={sectionIndex} sx={{ mb: 2 }}>
+                                                    <Typography variant="subtitle1" gutterBottom>
+                                                        {section.title}
+                                                    </Typography>
+                                                    <List>
+                                                        {section.content.map((item, itemIndex) => (
+                                                            <ListItem key={itemIndex}>
+                                                                <ListItemIcon>
+                                                                    <FiberManualRecordIcon sx={{ fontSize: 8 }} />
+                                                                </ListItemIcon>
+                                                                <ListItemText primary={item} />
+                                                            </ListItem>
+                                                        ))}
+                                                    </List>
+                                                </Box>
+                                            ))
+                                        ) : (
+                                            // Render plain text message
+                                            <Typography variant="body1">
+                                                {message.content}
+                                            </Typography>
+                                        )}
+                                    </Paper>
+                                </Box>
+                            ))}
+                            {loading && !currentStatus && (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                                    <CircularProgress size={24} />
+                                </Box>
+                            )}
+                            {error && (
+                                <Alert severity="error" sx={{ mt: 2 }}>
+                                    {error}
+                                </Alert>
+                            )}
+                        </Box>
+
+                        {/* Input Area */}
+                        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+                            <Grid container spacing={2} alignItems="center">
+                                <Grid item xs>
+                                    <TextField
+                                        fullWidth
+                                        multiline
+                                        maxRows={4}
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyPress={handleKeyPress}
+                                        placeholder="Type your message..."
+                                        disabled={loading}
+                                        variant="outlined"
+                                        size="small"
+                                    />
+                                </Grid>
+                                <Grid item>
+                                    <Button
+                                        variant="contained"
+                                        onClick={handleSend}
+                                        disabled={loading || !input.trim()}
+                                        startIcon={loading ? <CircularProgress size={20} /> : <Send />}
+                                    >
+                                        Send
+                                    </Button>
+                                </Grid>
                             </Grid>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    value={clientInfo}
-                                    onChange={(e) => setClientInfo(e.target.value)}
-                                    onKeyPress={handleKeyPress}
-                                    placeholder="Client Information (Optional)"
-                                    variant="outlined"
-                                    disabled={loading}
-                                />
-                            </Grid>
-                            <Grid item xs={12}>
-                                <Button
-                                    variant="contained"
-                                    onClick={handleGenerateReport}
-                                    disabled={loading || !query.trim()}
-                                    startIcon={loading ? <CircularProgress size={20} /> : <Send />}
-                                >
-                                    {loading ? 'Generating Report...' : 'Generate Report'}
-                                </Button>
-                            </Grid>
-                        </Grid>
+                        </Box>
+
+                        {/* Report Actions */}
+                        {report && (
+                            <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+                                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                    <Tooltip title="Save Report">
+                                        <IconButton onClick={handleSaveReport} color="primary">
+                                            <Save />
+                                        </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Download Report">
+                                        <IconButton color="primary">
+                                            <Download />
+                                        </IconButton>
+                                    </Tooltip>
+                                </Stack>
+                            </Box>
+                        )}
                     </Card>
-
-                    {error && (
-                        <Card sx={{ mb: 3, p: 2, bgcolor: 'error.light' }}>
-                            <Typography color="error">{error}</Typography>
-                        </Card>
-                    )}
-
-                    {report && (
-                        <Card sx={{ mb: 3, p: 3 }}>
-                            <Typography variant="h6" gutterBottom>
-                                Report Generated Successfully
-                            </Typography>
-                            <Typography variant="body1" color="textSecondary">
-                                Your report has been generated and saved. You can find it in the Reports section.
-                            </Typography>
-                        </Card>
-                    )}
                 </div>
             </div>
 
