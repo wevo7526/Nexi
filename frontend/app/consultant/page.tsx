@@ -3,6 +3,47 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
+import dynamic from 'next/dynamic';
+import { ChartData, ChartOptions, ChartType } from 'chart.js';
+
+// Dynamically import chart components
+const Chart = dynamic(() => import('react-chartjs-2').then(mod => mod.Line), { ssr: false });
+const BarChart = dynamic(() => import('react-chartjs-2').then(mod => mod.Bar), { ssr: false });
+const PieChart = dynamic(() => import('react-chartjs-2').then(mod => mod.Pie), { ssr: false });
+
+// Register Chart.js components
+if (typeof window !== 'undefined') {
+    const {
+        Chart: ChartJS,
+        CategoryScale,
+        LinearScale,
+        PointElement,
+        LineElement,
+        BarElement,
+        ArcElement,
+        Title,
+        Tooltip,
+        Legend
+    } = require('chart.js');
+    
+    ChartJS.register(
+        CategoryScale,
+        LinearScale,
+        PointElement,
+        LineElement,
+        BarElement,
+        ArcElement,
+        Title,
+        Tooltip,
+        Legend
+    );
+}
+
+interface ChartDataProps {
+    type: 'line' | 'bar' | 'pie';
+    data: ChartData<ChartType>;
+    options: ChartOptions<ChartType>;
+}
 
 interface ChatMessage {
     id: string;
@@ -24,6 +65,7 @@ export default function ConsultantPage() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [streamingMessage, setStreamingMessage] = useState('');
     const [structuredOutputs, setStructuredOutputs] = useState<StructuredOutput[]>([]);
+    const [progress, setProgress] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
@@ -113,16 +155,17 @@ export default function ConsultantPage() {
 
                 // Add assistant message with structured output
                 if (data.answer) {
+                    // Create a message with the main content
                     setMessages(prev => [{
                         id: (Date.now() + 1).toString(),
                         role: 'assistant',
-                        content: data.answer.content?.sections?.[0]?.content || 'Analysis complete.',
+                        content: data.answer.content || 'Analysis complete.',
                         created_at: new Date().toISOString()
                     }, ...prev]);
                     
-                    // Add structured output if available
-                    if (data.answer.type) {
-                        setStructuredOutputs(prev => [data.answer, ...prev]);
+                    // Handle structured output
+                    if (data.answer.outputs && Array.isArray(data.answer.outputs)) {
+                        setStructuredOutputs(prev => [...data.answer.outputs, ...prev]);
                     }
                 }
                 
@@ -148,6 +191,21 @@ export default function ConsultantPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
+    const renderChart = (chartData: ChartDataProps) => {
+        const { type, data, options } = chartData;
+        
+        switch (type) {
+            case 'line':
+                return <Chart data={data as ChartData<'line'>} options={options as ChartOptions<'line'>} />;
+            case 'bar':
+                return <BarChart data={data as ChartData<'bar'>} options={options as ChartOptions<'bar'>} />;
+            case 'pie':
+                return <PieChart data={data as ChartData<'pie'>} options={options as ChartOptions<'pie'>} />;
+            default:
+                return <div>Unsupported chart type</div>;
+        }
+    };
+
     const renderStructuredOutput = (output: StructuredOutput) => {
         switch (output.type) {
             case 'analysis':
@@ -161,6 +219,11 @@ export default function ConsultantPage() {
                                     <div className="section-content">
                                         {section.content}
                                     </div>
+                                    {section.chart && (
+                                        <div className="section-chart">
+                                            {renderChart(section.chart)}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -239,10 +302,7 @@ export default function ConsultantPage() {
                     <div className="chart-container">
                         <h3 className="chart-title">{output.title}</h3>
                         <div className="chart-content">
-                            {/* Add chart rendering logic here based on chart type */}
-                            <div className="chart-placeholder">
-                                Chart visualization would go here
-                            </div>
+                            {renderChart(output.content)}
                         </div>
                     </div>
                 );
@@ -253,69 +313,58 @@ export default function ConsultantPage() {
 
     return (
         <div className="consultant-page">
-            <div className="query-section">
-                <div className="query-container">
+            <div className="consultant-container">
+                <div className="query-section">
                     <h1 className="page-title">Business Consultant</h1>
                     <form onSubmit={handleSubmit} className="query-form">
-                        <div className="input-wrapper">
-                            <input
-                                type="text"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder="Ask your business question..."
-                                disabled={isLoading}
-                                className="query-input"
-                            />
-                            <button
-                                type="submit"
-                                disabled={isLoading || !query.trim()}
-                                className="submit-button"
-                            >
-                                {isLoading ? (
-                                    <div className="button-content">
-                                        <div className="loading-spinner"></div>
-                                        <span>Processing</span>
-                                    </div>
-                                ) : (
-                                    <div className="button-content">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                        </svg>
-                                        <span>Ask</span>
-                                    </div>
-                                )}
-                            </button>
-                        </div>
-                        {isLoading && (
-                            <div className="progress-bar">
-                                <div className="progress-indicator"></div>
-                            </div>
-                        )}
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Ask your business question..."
+                            disabled={isLoading}
+                            className="query-input"
+                        />
+                        <button
+                            type="submit"
+                            disabled={isLoading || !query.trim()}
+                            className="submit-button"
+                        >
+                            {isLoading ? 'Analyzing...' : 'Analyze'}
+                        </button>
                     </form>
                 </div>
-            </div>
 
-            <div className="content-section">
                 <div className="messages-container">
-                    {streamingMessage && (
-                        <div className="message streaming">
-                            <div className="message-content">
-                                {streamingMessage}
-                            </div>
-                            {structuredOutputs.map((output, index) => (
-                                <div key={index} className="structured-output">
-                                    {renderStructuredOutput(output)}
-                                </div>
-                            ))}
-                        </div>
-                    )}
                     {messages.map((message) => (
                         <div key={message.id} className={`message ${message.role}`}>
                             <div className="message-content">
                                 {message.content}
+                                {message.role === 'assistant' && structuredOutputs.length > 0 && (
+                                    <div className="structured-outputs">
+                                        {structuredOutputs.map((output: StructuredOutput, index: number) => (
+                                            <div key={index} className="structured-output">
+                                                {renderStructuredOutput(output)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="message-timestamp">
+                                {new Date(message.created_at).toLocaleString()}
                             </div>
                         </div>
                     ))}
+                    {isLoading && (
+                        <div className="loading-indicator">
+                            <div className="progress-bar">
+                                <div 
+                                    className="progress-fill"
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
                     <div ref={messagesEndRef} />
                 </div>
             </div>
@@ -331,314 +380,221 @@ export default function ConsultantPage() {
                     left: 0;
                     right: 0;
                     bottom: 0;
+                    padding: 2rem;
+                    overflow: hidden; /* Prevent page-level scrolling */
+                }
+
+                .consultant-container {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    width: 100%;
+                    position: relative;
+                    overflow: hidden; /* Contain the scrolling area */
                 }
 
                 .query-section {
+                    padding: 1.5rem;
+                    background: white;
+                    border-radius: 12px;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                    margin-bottom: 2rem;
                     position: sticky;
                     top: 0;
-                    left: 0;
-                    right: 0;
-                    background: #ffffff;
-                    z-index: 100;
-                    border-bottom: 1px solid #e2e8f0;
-                }
-
-                .query-container {
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    padding: 1.5rem 2rem;
+                    z-index: 10;
                 }
 
                 .page-title {
                     font-size: 1.5rem;
                     font-weight: 600;
-                    color: #1e293b;
+                    color: #1f2937;
                     margin-bottom: 1.5rem;
+                    text-align: center;
                 }
 
                 .query-form {
-                    max-width: 800px;
-                    margin: 0 auto;
-                }
-
-                .input-wrapper {
                     display: flex;
+                    gap: 1rem;
                     align-items: center;
-                    background: #ffffff;
-                    border-radius: 12px;
-                    border: 1px solid #e2e8f0;
-                    transition: all 0.2s;
-                    position: relative;
-                }
-
-                .input-wrapper:focus-within {
-                    border-color: #3b82f6;
-                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
                 }
 
                 .query-input {
                     flex: 1;
-                    padding: 1rem 1.5rem;
-                    border: none;
-                    border-radius: 12px;
+                    padding: 0.875rem 1rem;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
                     font-size: 1rem;
                     transition: all 0.2s;
-                    background: transparent;
-                    padding-right: 140px; /* Make space for the button */
                 }
 
                 .query-input:focus {
                     outline: none;
-                }
-
-                .query-input::placeholder {
-                    color: #94a3b8;
+                    border-color: #3b82f6;
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
                 }
 
                 .submit-button {
-                    position: absolute;
-                    right: 0.5rem;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    padding: 0.75rem 1.25rem;
+                    padding: 0.875rem 1.5rem;
                     background: #3b82f6;
                     color: white;
                     border: none;
                     border-radius: 8px;
                     cursor: pointer;
-                    font-size: 0.875rem;
+                    font-size: 1rem;
                     font-weight: 500;
                     transition: all 0.2s;
                     white-space: nowrap;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    min-width: 100px;
-                }
-
-                .button-content {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-
-                .loading-spinner {
-                    width: 16px;
-                    height: 16px;
-                    border: 2px solid #ffffff;
-                    border-top-color: transparent;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                }
-
-                @keyframes spin {
-                    to {
-                        transform: rotate(360deg);
-                    }
                 }
 
                 .submit-button:disabled {
-                    background: #94a3b8;
+                    background: #9ca3af;
                     cursor: not-allowed;
                 }
 
                 .submit-button:hover:not(:disabled) {
                     background: #2563eb;
-                    transform: translateY(-50%) scale(1.02);
-                }
-
-                .progress-bar {
-                    height: 2px;
-                    background: #e2e8f0;
-                    margin-top: 0.5rem;
-                    border-radius: 1px;
-                    overflow: hidden;
-                }
-
-                .progress-indicator {
-                    height: 100%;
-                    background: #3b82f6;
-                    width: 0%;
-                    animation: progress 2s ease-in-out infinite;
-                }
-
-                @keyframes progress {
-                    0% { width: 0%; }
-                    50% { width: 70%; }
-                    100% { width: 100%; }
-                }
-
-                .content-section {
-                    flex: 1;
-                    overflow: hidden;
-                    background: #ffffff;
-                    position: relative;
                 }
 
                 .messages-container {
-                    height: 100%;
+                    flex: 1;
                     overflow-y: auto;
-                    padding: 2rem;
+                    padding: 1rem;
                     display: flex;
                     flex-direction: column;
-                    gap: 2rem;
-                    max-width: 1200px;
-                    margin: 0 auto;
+                    gap: 1.5rem;
+                    scrollbar-width: thin;
+                    scrollbar-color: #cbd5e1 #f1f5f9;
+                    height: calc(100vh - 200px);
+                    position: relative;
+                }
+
+                .messages-container::-webkit-scrollbar {
+                    width: 8px;
+                }
+
+                .messages-container::-webkit-scrollbar-track {
+                    background: #f1f5f9;
+                    border-radius: 4px;
+                }
+
+                .messages-container::-webkit-scrollbar-thumb {
+                    background-color: #cbd5e1;
+                    border-radius: 4px;
                 }
 
                 .message {
-                    max-width: 800px;
-                    margin: 0 auto;
-                    width: 100%;
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    max-width: 85%;
+                    background: white;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
                 }
 
                 .message.user {
-                    align-self: flex-end;
+                    background: #f3f4f6;
+                    margin-left: auto;
                 }
 
                 .message.assistant {
-                    align-self: flex-start;
+                    background: #f0f9ff;
+                    margin-right: auto;
                 }
 
                 .message-content {
-                    padding: 1.5rem;
-                    border-radius: 16px;
-                    background: #ffffff;
                     white-space: pre-wrap;
                     line-height: 1.6;
-                    border: 1px solid #e2e8f0;
+                    color: #1f2937;
                 }
 
-                .message.user .message-content {
+                .message-timestamp {
+                    font-size: 0.875rem;
+                    color: #6b7280;
+                    margin-top: 0.5rem;
+                }
+
+                .loading-indicator {
+                    padding: 1rem;
+                }
+
+                .progress-bar {
+                    height: 4px;
+                    background: #e5e7eb;
+                    border-radius: 2px;
+                    overflow: hidden;
+                }
+
+                .progress-fill {
+                    height: 100%;
                     background: #3b82f6;
-                    color: white;
-                    border: none;
+                    transition: width 0.3s ease;
                 }
 
-                .message.streaming .message-content {
-                    background: #ffffff;
-                    border: 1px solid #e2e8f0;
+                .structured-outputs {
+                    margin-top: 1rem;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                    width: 100%;
                 }
 
                 .structured-output {
-                    margin-top: 1.5rem;
-                    padding: 1.5rem;
-                    background: #ffffff;
-                    border-radius: 16px;
-                    border: 1px solid #e2e8f0;
-                }
-
-                .table-container {
-                    overflow-x: auto;
-                    margin: 1rem 0;
+                    background: white;
                     border-radius: 8px;
-                    background: #ffffff;
-                }
-
-                .data-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-size: 0.875rem;
-                }
-
-                .data-table th,
-                .data-table td {
                     padding: 1rem;
-                    text-align: left;
-                    border-bottom: 1px solid #e2e8f0;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                    width: 100%;
                 }
 
-                .data-table th {
-                    background: #f8fafc;
-                    font-weight: 600;
-                    color: #1e293b;
-                }
-
-                .data-table tr:hover {
-                    background: #f8fafc;
-                }
-
+                .analysis-container,
+                .recommendation-container,
+                .metric-container,
+                .table-container,
                 .chart-container {
-                    padding: 1.5rem;
-                    background: #ffffff;
-                    border-radius: 16px;
-                    margin: 1rem 0;
-                    border: 1px solid #e2e8f0;
-                }
-
-                .chart-placeholder {
-                    height: 300px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: #f8fafc;
+                    background: white;
                     border-radius: 8px;
-                    color: #64748b;
+                    padding: 1rem;
+                    margin-bottom: 1rem;
                 }
 
-                .text-content {
-                    white-space: pre-wrap;
-                    line-height: 1.6;
-                    color: #1e293b;
-                }
-
-                .analysis-container {
-                    background: #ffffff;
-                    border-radius: 16px;
-                    padding: 1.5rem;
-                    margin: 1rem 0;
-                    border: 1px solid #e2e8f0;
-                }
-
-                .analysis-title {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 1.5rem;
-                }
-
-                .analysis-section {
-                    margin-bottom: 1.5rem;
-                }
-
-                .section-title {
+                .analysis-title,
+                .recommendation-title,
+                .metric-title,
+                .table-title,
+                .chart-title {
                     font-size: 1.1rem;
-                    font-weight: 500;
-                    color: #3b82f6;
+                    font-weight: 600;
+                    color: #1f2937;
                     margin-bottom: 0.75rem;
                 }
 
+                .analysis-section {
+                    margin-bottom: 1rem;
+                }
+
+                .section-title {
+                    font-weight: 500;
+                    color: #3b82f6;
+                    margin-bottom: 0.5rem;
+                }
+
                 .section-content {
-                    color: #1e293b;
+                    color: #4b5563;
                     line-height: 1.6;
                 }
 
-                .recommendation-container {
-                    background: #ffffff;
-                    border-radius: 16px;
-                    padding: 1.5rem;
-                    margin: 1rem 0;
-                    border: 1px solid #e2e8f0;
-                }
-
-                .recommendation-title {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 1.5rem;
-                }
-
                 .recommendation-item {
-                    padding: 1rem;
-                    border-radius: 8px;
-                    background: #f8fafc;
-                    margin-bottom: 1rem;
+                    padding: 0.75rem;
+                    border-radius: 6px;
+                    background: #f9fafb;
+                    margin-bottom: 0.75rem;
                 }
 
                 .recommendation-header {
                     display: flex;
                     align-items: center;
-                    gap: 0.75rem;
+                    gap: 0.5rem;
                     margin-bottom: 0.5rem;
                 }
 
@@ -647,81 +603,32 @@ export default function ConsultantPage() {
                     border-radius: 4px;
                     font-size: 0.875rem;
                     font-weight: 500;
-                    background: #e2e8f0;
-                    color: #1e293b;
-                }
-
-                .recommendation-description {
-                    color: #1e293b;
-                    line-height: 1.6;
-                    margin-bottom: 0.75rem;
-                }
-
-                .impact-section {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-
-                .impact-label {
-                    color: #64748b;
-                    font-size: 0.875rem;
-                }
-
-                .impact-value {
-                    font-weight: 500;
-                    font-size: 0.875rem;
-                }
-
-                .impact-value.high {
-                    color: #22c55e;
-                }
-
-                .impact-value.medium {
-                    color: #f59e0b;
-                }
-
-                .impact-value.low {
-                    color: #ef4444;
-                }
-
-                .metric-container {
-                    background: #ffffff;
-                    border-radius: 16px;
-                    padding: 1.5rem;
-                    margin: 1rem 0;
-                    border: 1px solid #e2e8f0;
-                }
-
-                .metric-title {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 1.5rem;
+                    background: #e5e7eb;
+                    color: #1f2937;
                 }
 
                 .metric-grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
                     gap: 1rem;
                 }
 
                 .metric-card {
-                    background: #f8fafc;
-                    border-radius: 8px;
+                    background: #f9fafb;
+                    border-radius: 6px;
                     padding: 1rem;
                     text-align: center;
                 }
 
                 .metric-value {
-                    font-size: 1.5rem;
+                    font-size: 1.25rem;
                     font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 0.5rem;
+                    color: #1f2937;
+                    margin-bottom: 0.25rem;
                 }
 
                 .metric-label {
-                    color: #64748b;
+                    color: #6b7280;
                     font-size: 0.875rem;
                 }
 
@@ -731,36 +638,84 @@ export default function ConsultantPage() {
                 }
 
                 .metric-trend.positive {
-                    color: #22c55e;
+                    color: #059669;
                 }
 
                 .metric-trend.negative {
-                    color: #ef4444;
+                    color: #dc2626;
                 }
 
-                .table-title,
-                .chart-title {
-                    font-size: 1.25rem;
+                .data-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+
+                .data-table th,
+                .data-table td {
+                    padding: 0.75rem;
+                    text-align: left;
+                    border-bottom: 1px solid #e5e7eb;
+                }
+
+                .data-table th {
+                    background: #f9fafb;
                     font-weight: 600;
-                    color: #1e293b;
+                    color: #1f2937;
+                }
+
+                .data-table tr:hover {
+                    background: #f9fafb;
+                }
+
+                .section-chart {
+                    margin-top: 1rem;
+                    padding: 1rem;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                }
+
+                .chart-content {
+                    position: relative;
+                    height: 300px;
+                    width: 100%;
+                }
+
+                .chart-container {
+                    background: white;
+                    border-radius: 8px;
+                    padding: 1rem;
                     margin-bottom: 1rem;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
                 }
 
                 @media (max-width: 768px) {
-                    .query-container {
+                    .consultant-page {
                         padding: 1rem;
+                    }
+
+                    .query-section {
+                        padding: 1rem;
+                    }
+
+                    .query-form {
+                        flex-direction: column;
+                    }
+
+                    .submit-button {
+                        width: 100%;
                     }
 
                     .messages-container {
-                        padding: 1rem;
+                        height: calc(100vh - 250px);
                     }
 
-                    .message-content {
-                        padding: 1rem;
+                    .message {
+                        max-width: 95%;
                     }
 
-                    .structured-output {
-                        padding: 1rem;
+                    .chart-content {
+                        height: 250px;
                     }
                 }
             `}</style>

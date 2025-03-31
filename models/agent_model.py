@@ -212,7 +212,25 @@ class ConsultantAgent:
                     self.save_chat_history(user_id, query, "human")
                     self.save_chat_history(user_id, response_content, "agent")
                     
-                    return response_content
+                    # Structure the response to match frontend expectations
+                    structured_response = {
+                        "type": "analysis",
+                        "title": "Business Analysis",
+                        "content": {
+                            "sections": [
+                                {
+                                    "title": "Response",
+                                    "content": response_content
+                                }
+                            ]
+                        }
+                    }
+                    
+                    return {
+                        "content": response_content,
+                        "type": "analysis",
+                        "outputs": [structured_response]
+                    }
                     
                 except Exception as e:
                     last_error = e

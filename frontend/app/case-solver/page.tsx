@@ -256,7 +256,6 @@ export default function CaseSolverPage() {
                     border: 1px solid #e2e8f0;
                     transition: all 0.2s;
                     position: relative;
-                    padding: 0.5rem;
                 }
 
                 .input-wrapper:focus-within {
@@ -266,13 +265,13 @@ export default function CaseSolverPage() {
 
                 .query-input {
                     flex: 1;
-                    padding: 0.75rem 1rem;
+                    padding: 1rem 1.5rem;
                     border: none;
-                    border-radius: 8px;
+                    border-radius: 12px;
                     font-size: 1rem;
                     transition: all 0.2s;
                     background: transparent;
-                    padding-right: 120px;
+                    padding-right: 140px; /* Make space for the button */
                 }
 
                 .query-input:focus {
@@ -288,11 +287,11 @@ export default function CaseSolverPage() {
                     right: 0.5rem;
                     top: 50%;
                     transform: translateY(-50%);
-                    padding: 0.5rem 1rem;
+                    padding: 0.75rem 1.25rem;
                     background: #3b82f6;
                     color: white;
                     border: none;
-                    border-radius: 6px;
+                    border-radius: 8px;
                     cursor: pointer;
                     font-size: 0.875rem;
                     font-weight: 500;
@@ -301,7 +300,7 @@ export default function CaseSolverPage() {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    min-width: 90px;
+                    min-width: 100px;
                 }
 
                 .button-content {
