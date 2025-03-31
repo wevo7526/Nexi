@@ -54,11 +54,6 @@ const navigation = [
                 icon: DocumentTextIcon
             },
             {
-                name: 'Documents',
-                path: '/documents',
-                icon: FolderIcon
-            },
-            {
                 name: 'Insights',
                 path: '/insights',
                 icon: LightBulbIcon
