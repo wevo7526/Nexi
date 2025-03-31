@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 import dynamic from 'next/dynamic';
 import { ChartData, ChartOptions, ChartType } from 'chart.js';
+import { PaperAirplaneIcon } from '@heroicons/react/24/outline';
 
 // Dynamically import chart components
 const Chart = dynamic(() => import('react-chartjs-2').then(mod => mod.Line), { ssr: false });
@@ -210,17 +211,17 @@ export default function ConsultantPage() {
         switch (output.type) {
             case 'analysis':
                 return (
-                    <div className="analysis-container">
-                        <h3 className="analysis-title">{output.title}</h3>
-                        <div className="analysis-content">
+                    <div className="bg-white rounded-lg shadow p-4 mb-4">
+                        <h3 className="text-lg font-semibold mb-3">{output.title}</h3>
+                        <div className="space-y-4">
                             {output.content.sections.map((section: any, index: number) => (
-                                <div key={index} className="analysis-section">
-                                    <h4 className="section-title">{section.title}</h4>
-                                    <div className="section-content">
+                                <div key={index} className="border-t pt-4 first:border-t-0 first:pt-0">
+                                    <h4 className="font-medium mb-2">{section.title}</h4>
+                                    <div className="text-gray-600">
                                         {section.content}
                                     </div>
                                     {section.chart && (
-                                        <div className="section-chart">
+                                        <div className="mt-4">
                                             {renderChart(section.chart)}
                                         </div>
                                     )}
@@ -231,20 +232,30 @@ export default function ConsultantPage() {
                 );
             case 'recommendation':
                 return (
-                    <div className="recommendation-container">
-                        <h3 className="recommendation-title">{output.title}</h3>
-                        <div className="recommendation-content">
+                    <div className="bg-white rounded-lg shadow p-4 mb-4">
+                        <h3 className="text-lg font-semibold mb-3">{output.title}</h3>
+                        <div className="space-y-4">
                             {output.content.recommendations.map((rec: any, index: number) => (
-                                <div key={index} className="recommendation-item">
-                                    <div className="recommendation-header">
-                                        <span className="priority-badge">{rec.priority}</span>
-                                        <h4>{rec.title}</h4>
+                                <div key={index} className="border-t pt-4 first:border-t-0 first:pt-0">
+                                    <div className="flex items-start gap-2">
+                                        <span className={`px-2 py-1 rounded text-xs ${
+                                            rec.priority === 'High' ? 'bg-red-100 text-red-800' :
+                                            rec.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-green-100 text-green-800'
+                                        }`}>
+                                            {rec.priority}
+                                        </span>
+                                        <h4 className="font-medium">{rec.title}</h4>
                                     </div>
-                                    <p className="recommendation-description">{rec.description}</p>
+                                    <p className="text-gray-600 mt-2">{rec.description}</p>
                                     {rec.impact && (
-                                        <div className="impact-section">
-                                            <span className="impact-label">Expected Impact:</span>
-                                            <span className={`impact-value ${rec.impact.toLowerCase()}`}>
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <span className="text-sm text-gray-500">Expected Impact:</span>
+                                            <span className={`text-sm font-medium ${
+                                                rec.impact === 'High' ? 'text-red-600' :
+                                                rec.impact === 'Medium' ? 'text-yellow-600' :
+                                                'text-green-600'
+                                            }`}>
                                                 {rec.impact}
                                             </span>
                                         </div>
@@ -254,114 +265,70 @@ export default function ConsultantPage() {
                         </div>
                     </div>
                 );
-            case 'metric':
-                return (
-                    <div className="metric-container">
-                        <h3 className="metric-title">{output.title}</h3>
-                        <div className="metric-grid">
-                            {output.content.metrics.map((metric: any, index: number) => (
-                                <div key={index} className="metric-card">
-                                    <div className="metric-value">{metric.value}</div>
-                                    <div className="metric-label">{metric.label}</div>
-                                    {metric.trend && (
-                                        <div className={`metric-trend ${metric.trend > 0 ? 'positive' : 'negative'}`}>
-                                            {metric.trend > 0 ? '↑' : '↓'} {Math.abs(metric.trend)}%
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                );
-            case 'table':
-                return (
-                    <div className="table-container">
-                        <h3 className="table-title">{output.title}</h3>
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    {output.content.headers.map((header: string, index: number) => (
-                                        <th key={index}>{header}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {output.content.rows.map((row: any[], rowIndex: number) => (
-                                    <tr key={rowIndex}>
-                                        {row.map((cell: any, cellIndex: number) => (
-                                            <td key={cellIndex}>{cell}</td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                );
-            case 'chart':
-                return (
-                    <div className="chart-container">
-                        <h3 className="chart-title">{output.title}</h3>
-                        <div className="chart-content">
-                            {renderChart(output.content)}
-                        </div>
-                    </div>
-                );
             default:
-                return <div className="text-content">{output.content}</div>;
+                return null;
         }
     };
 
     return (
-        <div className="consultant-page">
-            <div className="consultant-container">
-                <div className="query-section">
-                    <h1 className="page-title">Business Consultant</h1>
-                    <form onSubmit={handleSubmit} className="query-form">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Ask your business question..."
-                            disabled={isLoading}
-                            className="query-input"
-                        />
-                        <button
-                            type="submit"
-                            disabled={isLoading || !query.trim()}
-                            className="submit-button"
-                        >
-                            {isLoading ? 'Analyzing...' : 'Analyze'}
-                        </button>
-                    </form>
-                </div>
+        <div className="container mx-auto px-4 py-8">
+            <h1 className="text-3xl font-bold mb-8">AI Business Consultant</h1>
 
-                <div className="messages-container">
+            {/* Input Form */}
+            <form onSubmit={handleSubmit} className="mb-8">
+                <div className="mb-4">
+                    <label htmlFor="query" className="block text-sm font-medium text-gray-700 mb-2">
+                        Ask your business question:
+                    </label>
+                    <textarea
+                        id="query"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        className="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter your business question here..."
+                        required
+                        disabled={isLoading}
+                    />
+                </div>
+                
+                <button
+                    type="submit"
+                    disabled={isLoading || !query.trim()}
+                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isLoading ? 'Processing...' : 'Send Question'}
+                </button>
+            </form>
+
+            {/* Chat Messages */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
+                <h2 className="text-xl font-semibold mb-4">Conversation History:</h2>
+                <div className="space-y-4">
                     {messages.map((message) => (
-                        <div key={message.id} className={`message ${message.role}`}>
-                            <div className="message-content">
-                                {message.content}
-                                {message.role === 'assistant' && structuredOutputs.length > 0 && (
-                                    <div className="structured-outputs">
-                                        {structuredOutputs.map((output: StructuredOutput, index: number) => (
-                                            <div key={index} className="structured-output">
-                                                {renderStructuredOutput(output)}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                            <div className="message-timestamp">
-                                {new Date(message.created_at).toLocaleString()}
+                        <div
+                            key={message.id}
+                            className={`flex ${
+                                message.role === 'user' ? 'justify-end' : 'justify-start'
+                            }`}
+                        >
+                            <div
+                                className={`max-w-[80%] rounded-lg p-4 ${
+                                    message.role === 'user'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-white text-gray-800 border border-gray-200'
+                                }`}
+                            >
+                                <p className="whitespace-pre-wrap">{message.content}</p>
+                                <p className="text-xs mt-2 opacity-70">
+                                    {new Date(message.created_at).toLocaleString()}
+                                </p>
                             </div>
                         </div>
                     ))}
-                    {isLoading && (
-                        <div className="loading-indicator">
-                            <div className="progress-bar">
-                                <div 
-                                    className="progress-fill"
-                                    style={{ width: `${progress}%` }}
-                                />
+                    {streamingMessage && (
+                        <div className="flex justify-start">
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                <p className="whitespace-pre-wrap">{streamingMessage}</p>
                             </div>
                         </div>
                     )}
@@ -369,356 +336,16 @@ export default function ConsultantPage() {
                 </div>
             </div>
 
-            <style jsx>{`
-                .consultant-page {
-                    height: 100vh;
-                    display: flex;
-                    flex-direction: column;
-                    background: #ffffff;
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    padding: 2rem;
-                    overflow: hidden; /* Prevent page-level scrolling */
-                }
-
-                .consultant-container {
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    max-width: 800px;
-                    margin: 0 auto;
-                    width: 100%;
-                    position: relative;
-                    overflow: hidden; /* Contain the scrolling area */
-                }
-
-                .query-section {
-                    padding: 1.5rem;
-                    background: white;
-                    border-radius: 12px;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    margin-bottom: 2rem;
-                    position: sticky;
-                    top: 0;
-                    z-index: 10;
-                }
-
-                .page-title {
-                    font-size: 1.5rem;
-                    font-weight: 600;
-                    color: #1f2937;
-                    margin-bottom: 1.5rem;
-                    text-align: center;
-                }
-
-                .query-form {
-                    display: flex;
-                    gap: 1rem;
-                    align-items: center;
-                }
-
-                .query-input {
-                    flex: 1;
-                    padding: 0.875rem 1rem;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 8px;
-                    font-size: 1rem;
-                    transition: all 0.2s;
-                }
-
-                .query-input:focus {
-                    outline: none;
-                    border-color: #3b82f6;
-                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-                }
-
-                .submit-button {
-                    padding: 0.875rem 1.5rem;
-                    background: #3b82f6;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-size: 1rem;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                    white-space: nowrap;
-                }
-
-                .submit-button:disabled {
-                    background: #9ca3af;
-                    cursor: not-allowed;
-                }
-
-                .submit-button:hover:not(:disabled) {
-                    background: #2563eb;
-                }
-
-                .messages-container {
-                    flex: 1;
-                    overflow-y: auto;
-                    padding: 1rem;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 1.5rem;
-                    scrollbar-width: thin;
-                    scrollbar-color: #cbd5e1 #f1f5f9;
-                    height: calc(100vh - 200px);
-                    position: relative;
-                }
-
-                .messages-container::-webkit-scrollbar {
-                    width: 8px;
-                }
-
-                .messages-container::-webkit-scrollbar-track {
-                    background: #f1f5f9;
-                    border-radius: 4px;
-                }
-
-                .messages-container::-webkit-scrollbar-thumb {
-                    background-color: #cbd5e1;
-                    border-radius: 4px;
-                }
-
-                .message {
-                    padding: 1.5rem;
-                    border-radius: 12px;
-                    max-width: 85%;
-                    background: white;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                }
-
-                .message.user {
-                    background: #f3f4f6;
-                    margin-left: auto;
-                }
-
-                .message.assistant {
-                    background: #f0f9ff;
-                    margin-right: auto;
-                }
-
-                .message-content {
-                    white-space: pre-wrap;
-                    line-height: 1.6;
-                    color: #1f2937;
-                }
-
-                .message-timestamp {
-                    font-size: 0.875rem;
-                    color: #6b7280;
-                    margin-top: 0.5rem;
-                }
-
-                .loading-indicator {
-                    padding: 1rem;
-                }
-
-                .progress-bar {
-                    height: 4px;
-                    background: #e5e7eb;
-                    border-radius: 2px;
-                    overflow: hidden;
-                }
-
-                .progress-fill {
-                    height: 100%;
-                    background: #3b82f6;
-                    transition: width 0.3s ease;
-                }
-
-                .structured-outputs {
-                    margin-top: 1rem;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 1rem;
-                    width: 100%;
-                }
-
-                .structured-output {
-                    background: white;
-                    border-radius: 8px;
-                    padding: 1rem;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    width: 100%;
-                }
-
-                .analysis-container,
-                .recommendation-container,
-                .metric-container,
-                .table-container,
-                .chart-container {
-                    background: white;
-                    border-radius: 8px;
-                    padding: 1rem;
-                    margin-bottom: 1rem;
-                }
-
-                .analysis-title,
-                .recommendation-title,
-                .metric-title,
-                .table-title,
-                .chart-title {
-                    font-size: 1.1rem;
-                    font-weight: 600;
-                    color: #1f2937;
-                    margin-bottom: 0.75rem;
-                }
-
-                .analysis-section {
-                    margin-bottom: 1rem;
-                }
-
-                .section-title {
-                    font-weight: 500;
-                    color: #3b82f6;
-                    margin-bottom: 0.5rem;
-                }
-
-                .section-content {
-                    color: #4b5563;
-                    line-height: 1.6;
-                }
-
-                .recommendation-item {
-                    padding: 0.75rem;
-                    border-radius: 6px;
-                    background: #f9fafb;
-                    margin-bottom: 0.75rem;
-                }
-
-                .recommendation-header {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    margin-bottom: 0.5rem;
-                }
-
-                .priority-badge {
-                    padding: 0.25rem 0.5rem;
-                    border-radius: 4px;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    background: #e5e7eb;
-                    color: #1f2937;
-                }
-
-                .metric-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                    gap: 1rem;
-                }
-
-                .metric-card {
-                    background: #f9fafb;
-                    border-radius: 6px;
-                    padding: 1rem;
-                    text-align: center;
-                }
-
-                .metric-value {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1f2937;
-                    margin-bottom: 0.25rem;
-                }
-
-                .metric-label {
-                    color: #6b7280;
-                    font-size: 0.875rem;
-                }
-
-                .metric-trend {
-                    margin-top: 0.5rem;
-                    font-size: 0.875rem;
-                }
-
-                .metric-trend.positive {
-                    color: #059669;
-                }
-
-                .metric-trend.negative {
-                    color: #dc2626;
-                }
-
-                .data-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                }
-
-                .data-table th,
-                .data-table td {
-                    padding: 0.75rem;
-                    text-align: left;
-                    border-bottom: 1px solid #e5e7eb;
-                }
-
-                .data-table th {
-                    background: #f9fafb;
-                    font-weight: 600;
-                    color: #1f2937;
-                }
-
-                .data-table tr:hover {
-                    background: #f9fafb;
-                }
-
-                .section-chart {
-                    margin-top: 1rem;
-                    padding: 1rem;
-                    background: white;
-                    border-radius: 8px;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                }
-
-                .chart-content {
-                    position: relative;
-                    height: 300px;
-                    width: 100%;
-                }
-
-                .chart-container {
-                    background: white;
-                    border-radius: 8px;
-                    padding: 1rem;
-                    margin-bottom: 1rem;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                }
-
-                @media (max-width: 768px) {
-                    .consultant-page {
-                        padding: 1rem;
-                    }
-
-                    .query-section {
-                        padding: 1rem;
-                    }
-
-                    .query-form {
-                        flex-direction: column;
-                    }
-
-                    .submit-button {
-                        width: 100%;
-                    }
-
-                    .messages-container {
-                        height: calc(100vh - 250px);
-                    }
-
-                    .message {
-                        max-width: 95%;
-                    }
-
-                    .chart-content {
-                        height: 250px;
-                    }
-                }
-            `}</style>
+            {/* Structured Outputs */}
+            {structuredOutputs.length > 0 && (
+                <div className="space-y-4">
+                    {structuredOutputs.map((output, index) => (
+                        <div key={index}>
+                            {renderStructuredOutput(output)}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 } 

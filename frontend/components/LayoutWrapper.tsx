@@ -21,14 +21,14 @@ export default function LayoutWrapper({
             }
         };
 
-        // Don't check auth on the auth page
-        if (pathname !== '/auth') {
+        // Don't check auth on the auth page or home page
+        if (pathname !== '/auth' && pathname !== '/') {
             checkAuth();
         }
     }, [pathname, router]);
 
-    // Don't show sidebar on auth page
-    if (pathname === '/auth') {
+    // Don't show sidebar on auth page or home page
+    if (pathname === '/auth' || pathname === '/') {
         return <>{children}</>;
     }
 
