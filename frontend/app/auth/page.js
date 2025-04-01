@@ -1,13 +1,10 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Head from 'next/head';
-import AuthHandler from '../utils/authHandler';
-
-const authHandler = new AuthHandler();
+import { supabase, checkAuth, signIn, signUp } from '../../lib/supabaseClient';
 
 export default function Auth() {
     const [email, setEmail] = useState('');
@@ -25,9 +22,17 @@ export default function Auth() {
     }, []);
 
     const checkSession = async () => {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (session) {
-            router.push(redirectTo);
+        try {
+            const { session, error } = await checkAuth();
+            if (error) {
+                console.error('Session check error:', error);
+                return;
+            }
+            if (session) {
+                router.push(redirectTo);
+            }
+        } catch (err) {
+            console.error('Session check error:', err);
         }
     };
 
@@ -35,7 +40,7 @@ export default function Auth() {
         return email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
     };
 
-    const handleSignUp = async (e) => {
+    const handleEmailSignIn = async (e) => {
         e.preventDefault();
         setMessage({ type: '', content: '' });
 
@@ -49,40 +54,67 @@ export default function Auth() {
             return;
         }
 
-        if (!password || password.length < 6) {
-            setMessage({ type: 'error', content: 'Password must be at least 6 characters.' });
+        setIsLoading(true);
+        try {
+            const { data, error } = await signIn(email, password);
+            if (error) throw error;
+            
+            if (data?.session) {
+                router.push(redirectTo);
+            } else {
+                setMessage({
+                    type: 'error',
+                    content: 'Invalid email or password. Please try again.'
+                });
+            }
+        } catch (err) {
+            console.error('Sign in error:', err);
+            setMessage({
+                type: 'error',
+                content: err.message || 'An error occurred during sign in.'
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleEmailSignUp = async (e) => {
+        e.preventDefault();
+        setMessage({ type: '', content: '' });
+
+        if (!email || !password) {
+            setMessage({ type: 'error', content: 'Please enter both email and password.' });
+            return;
+        }
+
+        if (!validateEmail(email)) {
+            setMessage({ type: 'error', content: 'Please enter a valid email address.' });
+            return;
+        }
+
+        if (password.length < 6) {
+            setMessage({ type: 'error', content: 'Password must be at least 6 characters long.' });
             return;
         }
 
         setIsLoading(true);
         try {
-            const { data, error } = await authHandler.signUpWithEmail(email, password);
-
+            const { data, error } = await signUp(email, password);
             if (error) throw error;
-
-            if (!data?.user) {
-                throw new Error('No user data received');
+            
+            if (data?.user) {
+                setMessage({
+                    type: 'success',
+                    content: 'Check your email for the confirmation link!'
+                });
+            } else {
+                throw new Error('Failed to create account');
             }
-
-            setMessage({
-                type: 'success',
-                content: 'Account created successfully! Please check your email to verify your account.'
-            });
-
-            // Reset form
-            setEmail('');
-            setPassword('');
-
-            // Redirect to profile creation page for onboarding
-            setTimeout(() => {
-                router.push('/profile/create');
-            }, 2000);
-
         } catch (err) {
             console.error('Sign up error:', err);
             setMessage({
                 type: 'error',
-                content: err.message || 'An error occurred during sign up. Please try again.'
+                content: err.message || 'An error occurred during sign up.'
             });
         } finally {
             setIsLoading(false);
@@ -105,7 +137,9 @@ export default function Auth() {
 
         setIsLoading(true);
         try {
-            const { error } = await authHandler.signInWithMagicLink(email);
+            const { error } = await supabase.auth.signInWithOtp({
+                email,
+            });
             
             if (error) throw error;
             
@@ -120,7 +154,7 @@ export default function Auth() {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session) {
                     clearInterval(checkInterval);
-                    router.push(redirectTo);
+                    router.push('/consultant'); // Always redirect to consultant page
                 }
             }, 2000); // Check every 2 seconds
 
@@ -169,7 +203,7 @@ export default function Auth() {
                                     : 'Enter your email to receive a secure magic link'}
                             </p>
 
-                            <form onSubmit={isSignUp ? handleSignUp : handleMagicLinkSignIn} className="auth-form">
+                            <form onSubmit={isSignUp ? handleEmailSignUp : handleMagicLinkSignIn} className="auth-form">
                                 <div className="form-group">
                                     <label htmlFor="email">Email address</label>
                                     <input
@@ -217,7 +251,7 @@ export default function Auth() {
                                 >
                                     {isLoading ? (
                                         <span>
-                                            {isSignUp ? 'Creating account...' : 'Sending link...'}
+                                            {isSignUp ? 'Creating account...' : 'Sending magic link...'}
                                         </span>
                                     ) : (
                                         <span>

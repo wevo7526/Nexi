@@ -39,7 +39,7 @@ const navigation = [
                 icon: ChartBarSquareIcon
             },
             {
-                name: 'Multi-Agent',
+                name: 'Research Assistant',
                 path: '/multi-agent',
                 icon: CommandLineIcon
             }

@@ -63,12 +63,12 @@ export default function MarketResearchPage() {
                     if (line.startsWith('data: ')) {
                         try {
                             const data = JSON.parse(line.slice(6));
-                            
-                            if (data.type === 'thought') {
+
+                        if (data.type === 'thought') {
                                 setStreamContent(prev => prev + `💭 Analysis:\n${data.content}\n\n`);
-                            } else if (data.type === 'action') {
+                        } else if (data.type === 'action') {
                                 setStreamContent(prev => prev + `🔍 Research Action:\n${data.content}\n\n`);
-                            } else if (data.type === 'final') {
+                        } else if (data.type === 'final') {
                                 setStreamContent(prev => prev + `✅ Final Research Report:\n${data.content}\n\n`);
                                 setIsLoading(false);
                             } else if (data.type === 'error') {
@@ -109,19 +109,19 @@ export default function MarketResearchPage() {
                     />
                 </div>
                 
-                <button
-                    type="submit"
+                    <button
+                        type="submit"
                     disabled={isLoading}
                     className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                    >
                     {isLoading ? 'Researching...' : 'Start Research'}
-                </button>
-            </form>
+                    </button>
+                </form>
 
             {error && (
                 <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
                     {error}
-                </div>
+            </div>
             )}
 
             {streamContent && (

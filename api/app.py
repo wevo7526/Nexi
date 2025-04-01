@@ -28,7 +28,7 @@ from api.routes.chat import chat_bp
 from api.routes.market_research import market_research_bp
 from api.routes.insights import insights_bp
 from models.agent_model import ConsultantAgent
-from models.multi_agent_model import MultiAgentConsultant
+from models.multi_agent_model import PrimaryResearchConsultant
 from api.services.supabase_service import SupabaseService
 from api.routes.reports import reports_bp
 from api.routes.multi_agent import multi_agent_bp
@@ -85,7 +85,7 @@ def create_app():
     app.register_blueprint(market_research_bp, url_prefix='/api/market-research')
     app.register_blueprint(insights_bp, url_prefix='/api/insights')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
-    app.register_blueprint(multi_agent_bp)
+    app.register_blueprint(multi_agent_bp, url_prefix='/api/multi-agent')
     app.register_blueprint(report_generator_bp, url_prefix='/api/report-generator')
     app.register_blueprint(business_case_bp, url_prefix='/api/business-case')
 
@@ -104,7 +104,7 @@ if missing_vars:
 document_service = DocumentService()
 supabase_service = SupabaseService()
 consultant_agent = ConsultantAgent()
-multi_agent_consultant = MultiAgentConsultant()
+primary_research_consultant = PrimaryResearchConsultant()
 market_research_agent = MarketResearchAgent()
 business_consultant_agent = BusinessConsultantAgent()
 multi_agent_system = MultiAgentSystem()
