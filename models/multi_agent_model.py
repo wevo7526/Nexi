@@ -18,8 +18,8 @@ class PrimaryResearchConsultant:
         )
         self.focus_group_facilitator = ChatAnthropic(
             model="claude-3-5-sonnet-20240620",
-            temperature=0.2,
-            max_tokens=2048,
+            temperature=0.7,  # Increased for more creative responses
+            max_tokens=4096,  # Increased to allow for more detailed responses
             api_key=ANTHROPIC_API_KEY
         )
         self.survey_designer = ChatAnthropic(
@@ -75,50 +75,78 @@ class PrimaryResearchConsultant:
 
         Use clear section headers exactly as shown above, followed by detailed bullet points. Each point should be specific and actionable."""
 
-        self.focus_group_prompt = """You are an experienced focus group facilitator and moderator.
-        Your role is to design focus group discussion guides. You MUST format your response with the following sections:
+        self.focus_group_prompt = """You are an experienced focus group facilitator and moderator specializing in brand research.
+        Your role is to design comprehensive focus group discussion guides. You MUST format your response with the following sections:
 
         Discussion Guide:
-        - Welcome and introduction script with exact wording
-        - Key discussion topics with specific time allocations
-        - Main questions and detailed probing techniques
-        - Time management plan with buffer periods
-        - Participant engagement strategies
-        - Handling sensitive topics and difficult participants
-        - Managing group dynamics and power dynamics
-        - Ensuring all voices are heard
+        - Welcome and introduction script with exact wording and timing
+        - Detailed session overview with specific time allocations
+        - Key discussion topics with specific time allocations and probing questions
+        - Main questions with detailed probing techniques and follow-up prompts
+        - Time management plan with buffer periods and contingency plans
+        - Participant engagement strategies for different personality types
+        - Handling sensitive topics and difficult participants with specific scenarios
+        - Managing group dynamics and power dynamics with intervention techniques
+        - Ensuring all voices are heard with specific facilitation methods
+        - Closing remarks and next steps
+        - Detailed discussion flow with timing for each section
+        - Specific questions to explore brand perceptions and experiences
+        - Techniques for uncovering emotional connections to the brand
+        - Methods for gathering specific examples and stories
+        - Strategies for handling group consensus and dissent
 
         Moderator Techniques:
-        - Ice-breaker activities with specific instructions
-        - Engagement strategies for different personality types
-        - Handling difficult participants with specific scenarios
-        - Managing group dynamics with intervention techniques
-        - Building rapport and trust
-        - Managing time effectively
-        - Handling sensitive topics
-        - Ensuring productive discussion
+        - Ice-breaker activities with specific instructions and timing
+        - Engagement strategies for different personality types (quiet, dominant, etc.)
+        - Handling difficult participants with specific scenarios and responses
+        - Managing group dynamics with intervention techniques and timing
+        - Building rapport and trust through specific facilitation methods
+        - Managing time effectively with specific checkpoints
+        - Handling sensitive topics with appropriate framing
+        - Ensuring productive discussion with specific redirection techniques
+        - Managing group energy levels with specific techniques
+        - Handling technical difficulties and interruptions
+        - Managing recording equipment and note-taking
+        - Ensuring participant comfort and engagement
+        - Handling late arrivals and early departures
+        - Managing group size variations
+        - Ensuring confidentiality and ethical conduct
 
         Exercises:
-        - Group activities with detailed instructions
-        - Stimulus materials with specific usage guidelines
-        - Interactive elements with setup requirements
-        - Time management for each exercise
-        - Participant preparation requirements
-        - Materials needed for each exercise
-        - Success criteria for each activity
-        - Debriefing procedures
+        - Group activities with detailed instructions and timing
+        - Stimulus materials with specific usage guidelines and setup
+        - Interactive elements with setup requirements and materials
+        - Time management for each exercise with buffer time
+        - Participant preparation requirements and materials
+        - Materials needed for each exercise with specifications
+        - Success criteria for each activity with metrics
+        - Debriefing procedures with specific questions
+        - Brand association exercises with specific prompts
+        - Visual brand mapping activities
+        - Storytelling exercises for brand experiences
+        - Competitive brand comparison activities
+        - Future brand vision exercises
+        - Brand personality assessment activities
+        - Brand touchpoint evaluation exercises
 
         Stimuli:
-        - Visual materials with specific usage instructions
-        - Product samples with handling guidelines
-        - Concept boards with discussion prompts
-        - Prototypes with testing procedures
+        - Visual materials with specific usage instructions and timing
+        - Product samples with handling guidelines and setup
+        - Concept boards with discussion prompts and flow
+        - Prototypes with testing procedures and feedback forms
         - Digital materials with technical requirements
         - Backup materials and alternatives
-        - Accessibility considerations
+        - Accessibility considerations for all materials
         - Cultural sensitivity guidelines
+        - Brand materials (logos, ads, packaging)
+        - Competitor materials for comparison
+        - Historical brand materials
+        - Future brand concepts
+        - Brand touchpoint examples
+        - Brand personality visuals
+        - Brand value proposition materials
 
-        Use clear section headers exactly as shown above, followed by detailed bullet points. Each point should be specific and actionable."""
+        IMPORTANT: You MUST use these exact section headers, followed by detailed bullet points. Each point should be specific, actionable, and include timing where applicable. Do not add any other sections or modify the headers."""
 
         self.survey_designer_prompt = """You are a survey design expert specializing in marketing research.
         Your role is to design comprehensive surveys. You MUST format your response with the following sections:
@@ -293,56 +321,77 @@ class PrimaryResearchConsultant:
 
     def _get_focus_group_guide(self, query):
         """Generate focus group discussion guide."""
-        system_message = """You are an experienced focus group facilitator and moderator.
-        Your role is to design focus group discussion guides. You MUST format your response with the following sections:
-
-        Discussion Guide:
-        - Welcome and introduction script with exact wording
-        - Key discussion topics with specific time allocations
-        - Main questions and detailed probing techniques
-        - Time management plan with buffer periods
-        - Participant engagement strategies
-        - Handling sensitive topics and difficult participants
-        - Managing group dynamics and power dynamics
-        - Ensuring all voices are heard
-
-        Moderator Techniques:
-        - Ice-breaker activities with specific instructions
-        - Engagement strategies for different personality types
-        - Handling difficult participants with specific scenarios
-        - Managing group dynamics with intervention techniques
-        - Building rapport and trust
-        - Managing time effectively
-        - Handling sensitive topics
-        - Ensuring productive discussion
-
-        Exercises:
-        - Group activities with detailed instructions
-        - Stimulus materials with specific usage guidelines
-        - Interactive elements with setup requirements
-        - Time management for each exercise
-        - Participant preparation requirements
-        - Materials needed for each exercise
-        - Success criteria for each activity
-        - Debriefing procedures
-
-        Stimuli:
-        - Visual materials with specific usage instructions
-        - Product samples with handling guidelines
-        - Concept boards with discussion prompts
-        - Prototypes with testing procedures
-        - Digital materials with technical requirements
-        - Backup materials and alternatives
-        - Accessibility considerations
-        - Cultural sensitivity guidelines
-
-        IMPORTANT: You MUST use these exact section headers, followed by detailed bullet points. Do not add any other sections or modify the headers."""
-        
-        response = self.focus_group_facilitator.invoke([
-            ("system", system_message),
-            ("human", f"Create focus group guide for: {query}")
-        ])
-        return self._parse_focus_group_response(response.content)
+        try:
+            logging.info(f"Generating focus group guide for query: {query}")
+            
+            # Create a more specific prompt for the focus group
+            prompt = f"""Create a comprehensive focus group discussion guide for researching Colonial Williamsburg's brand effectiveness. 
+            The guide should include specific questions about brand perception, historical significance, visitor experiences, and brand alignment.
+            
+            Query: {query}
+            
+            IMPORTANT: Format your response with the following exact section headers, followed by bullet points. Each section should be separated by a blank line:
+            
+            Discussion Guide:
+            - Welcome and introduction script with exact wording and timing
+            - Detailed session overview with specific time allocations
+            - Key discussion topics with specific time allocations and probing questions
+            - Main questions with detailed probing techniques and follow-up prompts
+            - Time management plan with buffer periods and contingency plans
+            - Participant engagement strategies for different personality types
+            - Handling sensitive topics and difficult participants with specific scenarios
+            - Managing group dynamics and power dynamics with intervention techniques
+            - Ensuring all voices are heard with specific facilitation methods
+            - Closing remarks and next steps
+            
+            Moderator Techniques:
+            - Ice-breaker activities with specific instructions and timing
+            - Engagement strategies for different personality types (quiet, dominant, etc.)
+            - Handling difficult participants with specific scenarios and responses
+            - Managing group dynamics with intervention techniques and timing
+            - Building rapport and trust through specific facilitation methods
+            
+            Exercises:
+            - Group activities with detailed instructions and timing
+            - Stimulus materials with specific usage guidelines and setup
+            - Interactive elements with setup requirements and materials
+            - Time management for each exercise with buffer time
+            - Participant preparation requirements and materials
+            
+            Stimuli:
+            - Visual materials with specific usage instructions and timing
+            - Product samples with handling guidelines and setup
+            - Concept boards with discussion prompts and flow
+            - Prototypes with testing procedures and feedback forms
+            - Digital materials with technical requirements
+            
+            Please provide detailed content for each section, including specific timing, questions, and materials. Each section should be clearly separated by a blank line."""
+            
+            response = self.focus_group_facilitator.invoke([
+                ("system", self.focus_group_prompt),
+                ("human", prompt)
+            ])
+            
+            if not response or not response.content:
+                logging.error("Empty response received from focus group facilitator")
+                return {
+                    "discussion_guide": ["Error: No response generated"],
+                    "moderator_techniques": [],
+                    "exercises": [],
+                    "stimuli": []
+                }
+            
+            logging.info(f"Received focus group response with length: {len(response.content)}")
+            return self._parse_focus_group_response(response.content)
+            
+        except Exception as e:
+            logging.error(f"Error generating focus group guide: {str(e)}")
+            return {
+                "discussion_guide": [f"Error: {str(e)}"],
+                "moderator_techniques": [],
+                "exercises": [],
+                "stimuli": []
+            }
 
     def _get_survey_design(self, query):
         """Generate survey design and questions."""
@@ -389,7 +438,7 @@ class PrimaryResearchConsultant:
         - Data cleaning procedures
         - Quality reporting metrics
 
-        IMPORTANT: You MUST use these exact section headers, followed by detailed bullet points. Do not add any other sections or modify the headers."""
+        Use clear section headers exactly as shown above, followed by detailed bullet points. Each point should be specific and actionable."""
         
         response = self.survey_designer.invoke([
             ("system", system_message),
@@ -442,7 +491,7 @@ class PrimaryResearchConsultant:
         - Technical appendix
         - Presentation guidelines
 
-        IMPORTANT: You MUST use these exact section headers, followed by detailed bullet points. Do not add any other sections or modify the headers."""
+        Use clear section headers exactly as shown above, followed by detailed bullet points. Each point should be specific and actionable."""
         
         response = self.data_analyst.invoke([
             ("system", system_message),
@@ -456,13 +505,13 @@ class PrimaryResearchConsultant:
             logging.info(f"Attempting to extract section: {section_name}")
             logging.debug(f"Input text: {text[:200]}...")  # Log first 200 chars for debugging
 
-            # Try exact match first
+            # First try to find the section with a colon
             pattern = f"{section_name}:(.*?)(?=\n\n|$)"
             match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
             
             if not match:
-                # Try without colon
-                pattern = f"{section_name}(.*?)(?=\n\n|$)"
+                # Try without colon but with newline
+                pattern = f"{section_name}\n(.*?)(?=\n\n|$)"
                 match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
             
             if not match:
@@ -470,40 +519,70 @@ class PrimaryResearchConsultant:
                 pattern = f"{section_name}\s*(.*?)(?=\n\n|$)"
                 match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
             
+            if not match:
+                # Try to find content between section headers
+                sections = re.split(r'\n(?=[A-Za-z\s]+:)', text)
+                for section in sections:
+                    if section.strip().lower().startswith(section_name.lower()):
+                        content = section.split(':', 1)[1].strip() if ':' in section else section
+                        match = re.match(r'.*?(.*?)(?=\n\n|$)', content, re.DOTALL)
+                        if match:
+                            content = match.group(1).strip()
+                            break
+            
+            if not match:
+                # Try to find content between section headers without colon
+                sections = re.split(r'\n(?=[A-Za-z\s]+(?:\n|$))', text)
+                for section in sections:
+                    if section.strip().lower().startswith(section_name.lower()):
+                        content = section[len(section_name):].strip()
+                        match = re.match(r'.*?(.*?)(?=\n\n|$)', content, re.DOTALL)
+                        if match:
+                            content = match.group(1).strip()
+                            break
+            
             if match:
                 content = match.group(1).strip()
                 logging.info(f"Found section {section_name} with content length: {len(content)}")
                 
                 # Improved parsing to handle bullet points and numbered lists
                 items = []
+                current_item = []
+                
                 for line in content.split('\n'):
                     line = line.strip()
-                    # Remove common list markers
-                    line = re.sub(r'^[-•*]\s*', '', line)
-                    line = re.sub(r'^\d+\.\s*', '', line)
-                    # Remove any remaining whitespace
-                    line = line.strip()
-                    if line:
-                        items.append(line)
-                
-                logging.info(f"Extracted {len(items)} items from section {section_name}")
-                return items
-            
-            # If no match found, try to find content between section headers
-            sections = re.split(r'\n(?=[A-Za-z\s]+:)', text)
-            for section in sections:
-                if section.strip().lower().startswith(section_name.lower()):
-                    content = section.split(':', 1)[1].strip() if ':' in section else section
-                    items = []
-                    for line in content.split('\n'):
-                        line = line.strip()
+                    if not line:
+                        if current_item:
+                            items.append(' '.join(current_item))
+                            current_item = []
+                        continue
+                    
+                    # Handle bullet points and numbered lists
+                    if line.startswith(('-', '•', '*', '1.', '2.', '3.')):
+                        if current_item:
+                            items.append(' '.join(current_item))
+                            current_item = []
                         line = re.sub(r'^[-•*]\s*', '', line)
                         line = re.sub(r'^\d+\.\s*', '', line)
                         line = line.strip()
-                        if line:
-                            items.append(line)
-                    logging.info(f"Found section {section_name} in split sections with {len(items)} items")
-                    return items
+                    
+                    # Handle indented content
+                    if line.startswith('  ') or line.startswith('\t'):
+                        current_item.append(line.strip())
+                    else:
+                        if current_item:
+                            items.append(' '.join(current_item))
+                            current_item = []
+                        current_item.append(line)
+                
+                # Add any remaining item
+                if current_item:
+                    items.append(' '.join(current_item))
+                
+                # Clean up items
+                items = [item.strip() for item in items if item.strip()]
+                logging.info(f"Extracted {len(items)} items from section {section_name}")
+                return items
             
             logging.warning(f"Section '{section_name}' not found in response")
             return []
@@ -732,81 +811,173 @@ class PrimaryResearchConsultant:
             # Add relevant sections based on query type
             if query_type == "focus_group":
                 if research_plan.get("focus_group_research"):
-                    focus_group_items = []
-                    for section_name, items in research_plan["focus_group_research"].items():
-                        if items:
-                            focus_group_items.extend([f"• {item}" for item in items])
-                    
-                    if focus_group_items:
+                    # Add Discussion Guide section
+                    if research_plan["focus_group_research"].get("discussion_guide"):
                         response["content"]["sections"].append({
-                            "title": "Focus Group Research",
-                            "content": "\n".join(focus_group_items)
+                            "title": "Discussion Guide",
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["discussion_guide"]])
                         })
-                        logging.info("Added focus group section")
+                        logging.info("Added discussion guide section")
 
-                if research_plan.get("focus_group_guide"):
+                    # Add Moderator Techniques section
+                    if research_plan["focus_group_research"].get("moderator_techniques"):
+                        response["content"]["sections"].append({
+                            "title": "Moderator Techniques",
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["moderator_techniques"]])
+                        })
+                        logging.info("Added moderator techniques section")
+
+                    # Add Group Exercises section
+                    if research_plan["focus_group_research"].get("group_exercises"):
+                        response["content"]["sections"].append({
+                            "title": "Group Exercises",
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["group_exercises"]])
+                        })
+                        logging.info("Added group exercises section")
+
+                    # Add Stimuli Materials section
+                    if research_plan["focus_group_research"].get("stimuli_materials"):
+                        response["content"]["sections"].append({
+                            "title": "Stimuli Materials",
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["stimuli_materials"]])
+                        })
+                        logging.info("Added stimuli materials section")
+
+                # Add focus group guide as a structured output
+                if research_plan.get("focus_group_research"):
                     response["outputs"].append({
                         "type": "analysis",
                         "title": "Focus Group Guide",
-                        "content": research_plan["focus_group_guide"]
+                        "content": research_plan["focus_group_research"]
                     })
                     logging.info("Added focus group guide output")
 
             elif query_type == "survey":
                 if research_plan.get("survey_research"):
-                    survey_items = []
-                    for section_name, items in research_plan["survey_research"].items():
-                        if items:
-                            survey_items.extend([f"• {item}" for item in items])
-                    
-                    if survey_items:
+                    # Add Survey Questions section
+                    if research_plan["survey_research"].get("questions"):
                         response["content"]["sections"].append({
-                            "title": "Survey Research",
-                            "content": "\n".join(survey_items)
+                            "title": "Survey Questions",
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["questions"]])
                         })
-                        logging.info("Added survey section")
+                        logging.info("Added survey questions section")
 
-                if research_plan.get("survey_design"):
+                    # Add Response Scales section
+                    if research_plan["survey_research"].get("response_scales"):
+                        response["content"]["sections"].append({
+                            "title": "Response Scales",
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["response_scales"]])
+                        })
+                        logging.info("Added response scales section")
+
+                    # Add Survey Flow section
+                    if research_plan["survey_research"].get("survey_flow"):
+                        response["content"]["sections"].append({
+                            "title": "Survey Flow",
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["survey_flow"]])
+                        })
+                        logging.info("Added survey flow section")
+
+                    # Add Quality Controls section
+                    if research_plan["survey_research"].get("quality_controls"):
+                        response["content"]["sections"].append({
+                            "title": "Quality Controls",
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["quality_controls"]])
+                        })
+                        logging.info("Added quality controls section")
+
+                # Add survey design as a structured output
+                if research_plan.get("survey_research"):
                     response["outputs"].append({
                         "type": "analysis",
                         "title": "Survey Design",
-                        "content": research_plan["survey_design"]
+                        "content": research_plan["survey_research"]
                     })
                     logging.info("Added survey design output")
 
             elif query_type == "analysis":
                 if research_plan.get("analysis_plan"):
-                    analysis_items = []
-                    for section_name, items in research_plan["analysis_plan"].items():
-                        if items:
-                            analysis_items.extend([f"• {item}" for item in items])
-                    
-                    if analysis_items:
+                    # Add Analysis Methods section
+                    if research_plan["analysis_plan"].get("methods"):
                         response["content"]["sections"].append({
-                            "title": "Analysis Plan",
-                            "content": "\n".join(analysis_items)
+                            "title": "Analysis Methods",
+                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["methods"]])
                         })
-                        logging.info("Added analysis section")
+                        logging.info("Added analysis methods section")
+
+                    # Add Key Metrics section
+                    if research_plan["analysis_plan"].get("key_metrics"):
+                        response["content"]["sections"].append({
+                            "title": "Key Metrics",
+                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["key_metrics"]])
+                        })
+                        logging.info("Added key metrics section")
+
+                    # Add Visualization Plan section
+                    if research_plan["analysis_plan"].get("visualization"):
+                        response["content"]["sections"].append({
+                            "title": "Visualization Plan",
+                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["visualization"]])
+                        })
+                        logging.info("Added visualization plan section")
+
+                    # Add Reporting Template section
+                    if research_plan["analysis_plan"].get("reporting"):
+                        response["content"]["sections"].append({
+                            "title": "Reporting Template",
+                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["reporting"]])
+                        })
+                        logging.info("Added reporting template section")
+
+                # Add analysis plan as a structured output
+                if research_plan.get("analysis_plan"):
+                    response["outputs"].append({
+                        "type": "analysis",
+                        "title": "Analysis Plan",
+                        "content": research_plan["analysis_plan"]
+                    })
+                    logging.info("Added analysis plan output")
 
             else:  # General research query
                 if research_plan.get("research_overview"):
-                    overview_items = []
-                    for section_name, items in research_plan["research_overview"].items():
-                        if items:
-                            overview_items.extend([f"• {item}" for item in items])
-                    
-                    if overview_items:
+                    # Add Project Scope section
+                    if research_plan["research_overview"].get("project_scope"):
                         response["content"]["sections"].append({
-                            "title": "Research Overview",
-                            "content": "\n".join(overview_items)
+                            "title": "Project Scope",
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["project_scope"]])
                         })
-                        logging.info("Added research overview section")
+                        logging.info("Added project scope section")
 
-                if research_plan.get("research_design"):
+                    # Add Methodology section
+                    if research_plan["research_overview"].get("methodology"):
+                        response["content"]["sections"].append({
+                            "title": "Methodology",
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["methodology"]])
+                        })
+                        logging.info("Added methodology section")
+
+                    # Add Timeline section
+                    if research_plan["research_overview"].get("timeline"):
+                        response["content"]["sections"].append({
+                            "title": "Timeline",
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["timeline"]])
+                        })
+                        logging.info("Added timeline section")
+
+                    # Add Budget section
+                    if research_plan["research_overview"].get("budget"):
+                        response["content"]["sections"].append({
+                            "title": "Budget Considerations",
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["budget"]])
+                        })
+                        logging.info("Added budget section")
+
+                # Add research design as a structured output
+                if research_plan.get("research_overview"):
                     response["outputs"].append({
                         "type": "analysis",
                         "title": "Research Design",
-                        "content": research_plan["research_design"]
+                        "content": research_plan["research_overview"]
                     })
                     logging.info("Added research design output")
 
