@@ -38,6 +38,12 @@ def handle_errors(f):
             return jsonify(error_response), 500
     return decorated_function
 
+def format_content(content):
+    """Format content for SSE transmission."""
+    if isinstance(content, (dict, list)):
+        return json.dumps(content)
+    return str(content)
+
 @multi_agent_bp.route('/get_answer', methods=['POST'])
 @cross_origin(
     origins=['http://localhost:3000'],  # Replace with your frontend URL
@@ -120,15 +126,43 @@ def chat():
                 if "error" in research_design:
                     yield f"data: {json.dumps({'type': 'error', 'content': research_design['error']})}\n\n"
                     return
-                yield f"data: {json.dumps({'type': 'content', 'section': 'research_design', 'content': research_design})}\n\n"
+                yield f"data: {json.dumps({'type': 'content', 'section': 'research_design', 'content': format_content(research_design)})}\n\n"
 
                 # Focus Group Design Phase
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Creating focus group guide...'})}\n\n"
                 focus_group_guide = consultant._get_focus_group_guide(query)
                 if "error" in focus_group_guide:
-                    yield f"data: {json.dumps({'type': 'error', 'content': focus_group_guide['error']})}\n\n"
-                    return
-                yield f"data: {json.dumps({'type': 'content', 'section': 'focus_group', 'content': focus_group_guide})}\n\n"
+                    logger.warning(f"Focus group guide warning: {focus_group_guide['error']}")
+                    focus_group_guide = {
+                        "sections": [
+                            {
+                                "title": "Discussion Guide",
+                                "content": "Basic discussion guide for focus groups"
+                            }
+                        ]
+                    }
+                else:
+                    # Ensure the focus group guide has the correct structure
+                    if not isinstance(focus_group_guide, dict):
+                        focus_group_guide = {
+                            "sections": [
+                                {
+                                    "title": "Discussion Guide",
+                                    "content": str(focus_group_guide)
+                                }
+                            ]
+                        }
+                    elif "sections" not in focus_group_guide:
+                        focus_group_guide = {
+                            "sections": [
+                                {
+                                    "title": "Discussion Guide",
+                                    "content": json.dumps(focus_group_guide)
+                                }
+                            ]
+                        }
+                
+                yield f"data: {json.dumps({'type': 'content', 'section': 'focus_group', 'content': format_content(focus_group_guide)})}\n\n"
 
                 # Survey Design Phase
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Designing survey...'})}\n\n"
@@ -148,7 +182,7 @@ def chat():
                                 }
                             ]
                         }
-                    yield f"data: {json.dumps({'type': 'content', 'section': 'survey', 'content': survey_design})}\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'section': 'survey', 'content': format_content(survey_design)})}\n\n"
                 except Exception as e:
                     logger.error(f"Error in survey design: {str(e)}")
                     yield f"data: {json.dumps({'type': 'error', 'content': 'Error in survey design, continuing with analysis...'})}\n\n"
@@ -159,7 +193,7 @@ def chat():
                 if "error" in analysis_plan:
                     yield f"data: {json.dumps({'type': 'error', 'content': analysis_plan['error']})}\n\n"
                     return
-                yield f"data: {json.dumps({'type': 'content', 'section': 'analysis', 'content': analysis_plan})}\n\n"
+                yield f"data: {json.dumps({'type': 'content', 'section': 'analysis', 'content': format_content(analysis_plan)})}\n\n"
 
                 # Compile Final Report
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Compiling final research plan...'})}\n\n"
@@ -170,6 +204,16 @@ def chat():
                     analysis_plan,
                     data.get('client_info', {})
                 )
+
+                # Ensure the final plan has the correct structure
+                if not isinstance(final_plan, dict):
+                    final_plan = {
+                        "research_objectives": [],
+                        "methodology": [],
+                        "sample_design": [],
+                        "timeline": [],
+                        "budget_considerations": []
+                    }
 
                 # Send final structured data
                 yield f"data: {json.dumps({'type': 'final', 'content': final_plan})}\n\n"
