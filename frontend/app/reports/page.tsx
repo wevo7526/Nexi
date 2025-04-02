@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { DocumentArrowDownIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { DocumentArrowDownIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
@@ -94,38 +94,12 @@ export default function ReportsPage() {
                             const data = JSON.parse(line.slice(6));
                             
                             if (data.type === 'status') {
-                                const agentEmoji = data.agent === 'researcher' ? '🔍' :
-                                                 data.agent === 'web_scraper' ? '🌐' :
-                                                 data.agent === 'analyst' ? '📊' :
-                                                 data.agent === 'doc_writer' ? '📝' :
-                                                 data.agent === 'section_writer' ? '✍️' :
-                                                 data.agent === 'executive_summary_writer' ? '📋' : '🤖';
-                                setStreamContent(prev => prev + `${agentEmoji} ${data.agent?.replace('_', ' ').toUpperCase()}: ${data.content}\n\n`);
-                            } else if (data.type === 'content') {
-                                const sectionEmoji = data.section === 'research' ? '🔬' :
-                                                   data.section === 'analysis' ? '📈' :
-                                                   data.section === 'writing' ? '✍️' : '📝';
-                                setStreamContent(prev => prev + `${sectionEmoji} ${data.section.toUpperCase()}:\n${data.content}\n\n`);
+                                setStreamContent(prev => prev + `\n${data.agent}: ${data.content}`);
                             } else if (data.type === 'progress') {
-                                setProgress(data.progress || 0);
+                                setProgress(data.progress);
                             } else if (data.type === 'report') {
                                 currentReportId = data.reportId;
-                                const newReport: Report = {
-                                    id: data.reportId,
-                                    title: query,
-                                    createdAt: new Date().toISOString(),
-                                    status: 'completed' as const,
-                                    downloadUrl: `${BACKEND_URL}/api/reports/${data.reportId}/download`
-                                };
-                                setReports(prev => [newReport, ...prev]);
-                                setIsLoading(false);
-                            } else if (data.type === 'error') {
-                                if (currentReportId) {
-                                    setReports(prev => prev.map(r => 
-                                        r.id === currentReportId ? { ...r, status: 'failed' } : r
-                                    ));
-                                }
-                                setError(data.content);
+                                setStreamContent(prev => prev + '\nReport generation completed!');
                                 setIsLoading(false);
                             }
                         } catch (err) {
@@ -145,40 +119,27 @@ export default function ReportsPage() {
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-4xl">
-            <h1 className="text-3xl font-bold mb-8">Research Reports</h1>
+            <h1 className="text-3xl font-bold mb-8">Consulting Reports</h1>
 
             {/* Report Generation Form */}
             <div className="bg-white rounded-lg shadow p-6 mb-8">
                 <h2 className="text-xl font-semibold mb-4">Generate New Report</h2>
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label htmlFor="query" className="block text-sm font-medium text-gray-700 mb-2">
-                            What would you like to research?
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label htmlFor="query" className="block text-sm font-medium text-gray-700 mb-1">
+                            Report Topic
                         </label>
                         <textarea
                             id="query"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            className="w-full h-32 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Describe your research topic..."
+                            placeholder="Enter the topic or scope for your report..."
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            rows={4}
                             required
                         />
                     </div>
 
-                    {isLoading && (
-                        <div className="mb-4">
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                <div
-                                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                                    style={{ width: `${progress}%` }}
-                                ></div>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-2 text-center">
-                                Progress: {progress}%
-                            </p>
-                        </div>
-                    )}
-                    
                     <button
                         type="submit"
                         disabled={isLoading}
@@ -186,12 +147,12 @@ export default function ReportsPage() {
                     >
                         {isLoading ? (
                             <>
-                                <ChartBarIcon className="h-5 w-5 mr-2 animate-spin" />
+                                <DocumentTextIcon className="h-5 w-5 mr-2 animate-spin" />
                                 Generating Report...
                             </>
                         ) : (
                             <>
-                                <ChartBarIcon className="h-5 w-5 mr-2" />
+                                <DocumentTextIcon className="h-5 w-5 mr-2" />
                                 Generate Report
                             </>
                         )}

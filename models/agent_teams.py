@@ -121,24 +121,55 @@ def make_supervisor_node(llm: BaseChatModel, team_members: List[str]):
     def supervisor_node(state: State) -> Command[Literal["supervisor"]]:
         messages = state["messages"]
         last_message = messages[-1].content
+        current_status = state.get("status", "")
+        current_phase = state.get("phase", "research")
 
         # Check for completion indicators
         if any([
             "completed" in last_message.lower(),
             "final answer" in last_message.lower(),
-            "report is ready" in last_message.lower()
+            "report is ready" in last_message.lower(),
+            "task completed" in last_message.lower(),
+            "analysis complete" in last_message.lower(),
+            "writing complete" in last_message.lower()
         ]):
-            print(f"\n[Supervisor] Task completed successfully.")
-            return Command(
-                update={
-                    "messages": [
-                        *messages,
-                        HumanMessage(content="Task completed successfully.", name="supervisor")
-                    ],
-                    "status": "completed"
-                },
-                goto=END
-            )
+            # Handle phase transitions
+            if current_phase == "research":
+                return Command(
+                    update={
+                        "messages": [
+                            *messages,
+                            HumanMessage(content="Research phase completed, moving to analysis.", name="supervisor")
+                        ],
+                        "status": "research_completed",
+                        "phase": "analysis"
+                    },
+                    goto="analyst"
+                )
+            elif current_phase == "analysis":
+                return Command(
+                    update={
+                        "messages": [
+                            *messages,
+                            HumanMessage(content="Analysis phase completed, moving to writing.", name="supervisor")
+                        ],
+                        "status": "analysis_completed",
+                        "phase": "writing"
+                    },
+                    goto="doc_writer"
+                )
+            elif current_phase == "writing":
+                print(f"\n[Supervisor] All phases completed successfully.")
+                return Command(
+                    update={
+                        "messages": [
+                            *messages,
+                            HumanMessage(content="All phases completed successfully.", name="supervisor")
+                        ],
+                        "status": "completed"
+                    },
+                    goto=END
+                )
 
         # Create a structured prompt for the LLM
         prompt = f"""You are a supervisor coordinating a team of {len(team_members)} agents.
@@ -146,6 +177,8 @@ def make_supervisor_node(llm: BaseChatModel, team_members: List[str]):
         
         Team members: {', '.join(team_members)}
         Current request: {last_message}
+        Current status: {current_status}
+        Current phase: {current_phase}
         
         Respond with a JSON object containing:
         1. "next": The name of the team member who should handle this next
@@ -156,81 +189,47 @@ def make_supervisor_node(llm: BaseChatModel, team_members: List[str]):
         print(f"\n[Supervisor] Analyzing request and deciding next steps...")
         # Get the LLM's decision
         response = llm.invoke(prompt)
+        decision = json.loads(response.content)
         
-        try:
-            # Parse the response to get the next team member
-            decision = json.loads(response.content)
-            next_member = decision.get("next")
-            is_complete = decision.get("is_complete", False)
-            reason = decision.get("reason", "No reason provided")
-            
-            print(f"[Supervisor] Decision: {reason}")
-            
-            if is_complete:
-                print(f"[Supervisor] Task marked as complete.")
-                return Command(
-                    update={
-                        "messages": [
-                            *messages,
-                            HumanMessage(content="Task completed successfully.", name="supervisor")
-                        ],
-                        "status": "completed"
-                    },
-                    goto=END
-                )
-            
-            if next_member in team_members:
-                print(f"[Supervisor] Routing to {next_member}")
-                return Command(
-                    update={
-                        "messages": [
-                            *messages[:-1],  # Keep previous messages
-                            HumanMessage(content=last_message, name=next_member)
-                        ],
-                        "status": f"routing_to_{next_member}"
-                    },
-                    goto=next_member,
-                )
-            else:
-                print(f"[Supervisor] No valid team member found, ending task.")
-                return Command(
-                    update={
-                        "messages": [
-                            *messages,
-                            HumanMessage(content="I've completed the task.", name="supervisor")
-                        ],
-                        "status": "completed"
-                    },
-                    goto=END,
-                )
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"[Supervisor] Error parsing response: {str(e)}")
+        print(f"[Supervisor] Decision: {decision['reason']}")
+        
+        if decision.get("is_complete", False):
+            print("[Supervisor] Task marked as complete.")
             return Command(
                 update={
                     "messages": [
                         *messages,
-                        HumanMessage(content="I've completed the task.", name="supervisor")
+                        HumanMessage(content="Task completed successfully.", name="supervisor")
                     ],
-                    "status": "error"
+                    "status": "completed"
                 },
-                goto=END,
+                goto=END
             )
-
+        
+        print(f"[Supervisor] Routing to {decision['next']}")
+        return Command(
+            update={
+                "messages": [
+                    *messages,
+                    HumanMessage(content=f"Proceeding with {decision['next']}.", name="supervisor")
+                ]
+            },
+            goto=decision["next"]
+        )
+    
     return supervisor_node
 
 def create_research_team(llm: BaseChatModel):
-    """Create the research team that handles information gathering and analysis."""
+    """Create a simplified research team focused on gathering key information."""
     from langgraph.prebuilt import create_react_agent
 
     print("\n[Research Team] Initializing research team...")
     research_agent = create_react_agent(llm, tools=[search_web])
-    web_scraper_agent = create_react_agent(llm, tools=[scrape_webpages])
-    analysis_agent = create_react_agent(llm, tools=[python_repl_tool])
 
-    def research_node(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Researcher] Starting web search...")
+    def research_node(state: State) -> Command[Literal[END]]:
+        print("\n[Researcher] Gathering key information...")
         result = research_agent.invoke(state)
-        print(f"[Researcher] Search completed: {result['messages'][-1].content[:100]}...")
+        print(f"[Researcher] Research completed: {result['messages'][-1].content[:100]}...")
         return Command(
             update={
                 "messages": [
@@ -238,162 +237,77 @@ def create_research_team(llm: BaseChatModel):
                 ],
                 "status": "research_completed"
             },
-            goto="supervisor",
+            goto=END
         )
-
-    def web_scraping_node(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Web Scraper] Starting webpage scraping...")
-        result = web_scraper_agent.invoke(state)
-        print(f"[Web Scraper] Scraping completed: {result['messages'][-1].content[:100]}...")
-        return Command(
-            update={
-                "messages": [
-                    HumanMessage(content=result["messages"][-1].content, name="web_scraper")
-                ],
-                "status": "scraping_completed"
-            },
-            goto="supervisor",
-        )
-
-    def analysis_node(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Analyst] Starting data analysis...")
-        result = analysis_agent.invoke(state)
-        print(f"[Analyst] Analysis completed: {result['messages'][-1].content[:100]}...")
-        return Command(
-            update={
-                "messages": [
-                    HumanMessage(content=result["messages"][-1].content, name="analyst")
-                ],
-                "status": "analysis_completed"
-            },
-            goto="supervisor",
-        )
-
-    research_supervisor_node = make_supervisor_node(
-        llm, ["researcher", "web_scraper", "analyst"]
-    )
 
     research_builder = StateGraph(State)
-    research_builder.add_node("supervisor", research_supervisor_node)
     research_builder.add_node("researcher", research_node)
-    research_builder.add_node("web_scraper", web_scraping_node)
-    research_builder.add_node("analyst", analysis_node)
-
-    research_builder.add_edge(START, "supervisor")
+    research_builder.add_edge(START, "researcher")
     return research_builder.compile()
 
 def create_writing_team(llm: BaseChatModel):
-    """Create the writing team that handles document creation and editing."""
+    """Create a writing team focused on report generation."""
     from langgraph.prebuilt import create_react_agent
 
     print("\n[Writing Team] Initializing writing team...")
-    doc_writer_agent = create_react_agent(
+    writer_agent = create_react_agent(
         llm,
         tools=[create_outline, read_document, write_document, edit_document]
     )
-    section_writer_agent = create_react_agent(
-        llm,
-        tools=[read_document, write_document, edit_document]
-    )
-    executive_summary_agent = create_react_agent(
-        llm,
-        tools=[read_document, write_document, edit_document]
-    )
 
-    def doc_writing_node(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Document Writer] Starting report structure creation...")
-        result = doc_writer_agent.invoke(state)
-        print(f"[Document Writer] Report structure created: {result['messages'][-1].content[:100]}...")
+    def writing_node(state: State) -> Command[Literal[END]]:
+        print("\n[Writer] Creating report content...")
+        result = writer_agent.invoke(state)
+        print(f"[Writer] Writing completed: {result['messages'][-1].content[:100]}...")
         return Command(
             update={
                 "messages": [
-                    HumanMessage(content=result["messages"][-1].content, name="doc_writer")
-                ],
-                "status": "document_structure_created"
-            },
-            goto="supervisor",
-        )
-
-    def section_writing_node(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Section Writer] Starting detailed section writing...")
-        result = section_writer_agent.invoke(state)
-        print(f"[Section Writer] Section completed: {result['messages'][-1].content[:100]}...")
-        return Command(
-            update={
-                "messages": [
-                    HumanMessage(content=result["messages"][-1].content, name="section_writer")
-                ],
-                "status": "section_completed"
-            },
-            goto="supervisor",
-        )
-
-    def executive_summary_node(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Executive Summary Writer] Creating executive summary...")
-        result = executive_summary_agent.invoke(state)
-        print(f"[Executive Summary Writer] Summary completed: {result['messages'][-1].content[:100]}...")
-        return Command(
-            update={
-                "messages": [
-                    HumanMessage(content=result["messages"][-1].content, name="executive_summary_writer")
-                ],
-                "status": "executive_summary_completed"
-            },
-            goto="supervisor",
-        )
-
-    doc_writing_supervisor_node = make_supervisor_node(
-        llm, ["doc_writer", "section_writer", "executive_summary_writer"]
-    )
-
-    paper_writing_builder = StateGraph(State)
-    paper_writing_builder.add_node("supervisor", doc_writing_supervisor_node)
-    paper_writing_builder.add_node("doc_writer", doc_writing_node)
-    paper_writing_builder.add_node("section_writer", section_writing_node)
-    paper_writing_builder.add_node("executive_summary_writer", executive_summary_node)
-
-    paper_writing_builder.add_edge(START, "supervisor")
-    return paper_writing_builder.compile()
-
-def create_report_generator(llm: BaseChatModel):
-    """Create the top-level report generator that orchestrates research and writing teams."""
-    research_graph = create_research_team(llm)
-    writing_graph = create_writing_team(llm)
-
-    teams_supervisor_node = make_supervisor_node(llm, ["research_team", "writing_team"])
-
-    def call_research_team(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Report Generator] Starting research phase...")
-        response = research_graph.invoke({"messages": state["messages"][-1]})
-        print(f"[Report Generator] Research completed: {response['messages'][-1].content[:100]}...")
-        return Command(
-            update={
-                "messages": [
-                    HumanMessage(content=response["messages"][-1].content, name="research_team")
-                ],
-                "status": "research_completed"
-            },
-            goto="supervisor",
-        )
-
-    def call_writing_team(state: State) -> Command[Literal["supervisor"]]:
-        print("\n[Report Generator] Starting writing phase...")
-        response = writing_graph.invoke({"messages": state["messages"][-1]})
-        print(f"[Report Generator] Writing completed: {response['messages'][-1].content[:100]}...")
-        return Command(
-            update={
-                "messages": [
-                    HumanMessage(content=response["messages"][-1].content, name="writing_team")
+                    HumanMessage(content=result["messages"][-1].content, name="writer")
                 ],
                 "status": "writing_completed"
             },
-            goto="supervisor",
+            goto=END
+        )
+
+    writing_builder = StateGraph(State)
+    writing_builder.add_node("writer", writing_node)
+    writing_builder.add_edge(START, "writer")
+    return writing_builder.compile()
+
+def create_report_generator(llm: BaseChatModel):
+    """Create the top-level report generator that orchestrates the process."""
+    research_graph = create_research_team(llm)
+    writing_graph = create_writing_team(llm)
+
+    def research_phase(state: State) -> Command[Literal["writing_phase"]]:
+        print("\n[Report Generator] Starting research phase...")
+        response = research_graph.invoke({"messages": state["messages"][-1]})
+        return Command(
+            update={
+                "messages": [
+                    HumanMessage(content=response["messages"][-1].content, name="research_phase")
+                ],
+                "status": "research_completed"
+            },
+            goto="writing_phase"
+        )
+
+    def writing_phase(state: State) -> Command[Literal[END]]:
+        print("\n[Report Generator] Starting writing phase...")
+        response = writing_graph.invoke({"messages": state["messages"][-1]})
+        return Command(
+            update={
+                "messages": [
+                    HumanMessage(content=response["messages"][-1].content, name="writing_phase")
+                ],
+                "status": "writing_completed"
+            },
+            goto=END
         )
 
     report_builder = StateGraph(State)
-    report_builder.add_node("supervisor", teams_supervisor_node)
-    report_builder.add_node("research_team", call_research_team)
-    report_builder.add_node("writing_team", call_writing_team)
-
-    report_builder.add_edge(START, "supervisor")
+    report_builder.add_node("research_phase", research_phase)
+    report_builder.add_node("writing_phase", writing_phase)
+    report_builder.add_edge(START, "research_phase")
+    report_builder.add_edge("research_phase", "writing_phase")
     return report_builder.compile() 

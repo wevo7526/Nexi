@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Send, CheckCircle, AlertCircle, BookOpen, Users, ClipboardList, BarChart3, Clock, DollarSign, CheckCircle2, ChevronRight } from "lucide-react";
+import { Loader2, Send, CheckCircle, AlertCircle, BookOpen, Users, ClipboardList, BarChart3, Clock, DollarSign, CheckCircle2, ChevronRight, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -318,37 +318,37 @@ export default function MultiAgentPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
             >
-                <Card className="mb-6 border-gray-100 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
-                            Research Analysis Assistant
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="flex gap-2">
-                                <Input
-                                    value={query}
-                                    onChange={(e) => setQuery(e.target.value)}
-                                    placeholder="Enter your research query..."
-                                    className="flex-1 border-gray-200 focus:border-primary/50 focus:ring-primary/50"
-                                    disabled={isLoading}
-                                />
-                                <Button 
-                                    type="submit" 
-                                    disabled={isLoading}
-                                    className="bg-primary hover:bg-primary/90"
-                                >
-                                    {isLoading ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Send className="h-4 w-4" />
-                                    )}
-                                </Button>
-                            </div>
-                        </form>
-                    </CardContent>
-                </Card>
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent mb-4">
+                        Research Analysis Assistant
+                    </h1>
+                    <Card className="border-gray-100 shadow-sm">
+                        <CardContent className="pt-6">
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={query}
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        placeholder="Enter your research query..."
+                                        className="flex-1 border-gray-200 focus:border-primary/50 focus:ring-primary/50"
+                                        disabled={isLoading}
+                                    />
+                                    <Button 
+                                        type="submit" 
+                                        disabled={isLoading}
+                                        className="bg-primary hover:bg-primary/90"
+                                    >
+                                        {isLoading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Send className="h-4 w-4" />
+                                        )}
+                                    </Button>
+                                </div>
+                            </form>
+                        </CardContent>
+                    </Card>
+                </div>
             </motion.div>
 
             <AnimatePresence>
@@ -382,7 +382,10 @@ export default function MultiAgentPage() {
                                 </div>
                                 <Progress value={progress} className="h-2 bg-gray-100" />
                                 {streamContent.status && (
-                                    <p className="text-sm text-muted-foreground">{streamContent.status}</p>
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>{streamContent.status}</span>
+                                    </div>
                                 )}
                             </div>
                         </CardContent>
