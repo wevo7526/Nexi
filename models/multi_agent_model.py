@@ -6,6 +6,10 @@ import logging
 from datetime import datetime
 import re
 import json
+from langchain.schema import SystemMessage, HumanMessage
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class PrimaryResearchConsultant:
     def __init__(self):
@@ -319,79 +323,27 @@ class PrimaryResearchConsultant:
         ])
         return self._parse_research_design_response(response.content)
 
-    def _get_focus_group_guide(self, query):
-        """Generate focus group discussion guide."""
+    def _get_focus_group_guide(self, research_plan: str) -> str:
+        """Get focus group discussion guide"""
         try:
-            logging.info(f"Generating focus group guide for query: {query}")
-            
-            # Create a more specific prompt for the focus group
-            prompt = f"""Create a comprehensive focus group discussion guide for researching Colonial Williamsburg's brand effectiveness. 
-            The guide should include specific questions about brand perception, historical significance, visitor experiences, and brand alignment.
-            
-            Query: {query}
-            
-            IMPORTANT: Format your response with the following exact section headers, followed by bullet points. Each section should be separated by a blank line:
-            
-            Discussion Guide:
-            - Welcome and introduction script with exact wording and timing
-            - Detailed session overview with specific time allocations
-            - Key discussion topics with specific time allocations and probing questions
-            - Main questions with detailed probing techniques and follow-up prompts
-            - Time management plan with buffer periods and contingency plans
-            - Participant engagement strategies for different personality types
-            - Handling sensitive topics and difficult participants with specific scenarios
-            - Managing group dynamics and power dynamics with intervention techniques
-            - Ensuring all voices are heard with specific facilitation methods
-            - Closing remarks and next steps
-            
-            Moderator Techniques:
-            - Ice-breaker activities with specific instructions and timing
-            - Engagement strategies for different personality types (quiet, dominant, etc.)
-            - Handling difficult participants with specific scenarios and responses
-            - Managing group dynamics with intervention techniques and timing
-            - Building rapport and trust through specific facilitation methods
-            
-            Exercises:
-            - Group activities with detailed instructions and timing
-            - Stimulus materials with specific usage guidelines and setup
-            - Interactive elements with setup requirements and materials
-            - Time management for each exercise with buffer time
-            - Participant preparation requirements and materials
-            
-            Stimuli:
-            - Visual materials with specific usage instructions and timing
-            - Product samples with handling guidelines and setup
-            - Concept boards with discussion prompts and flow
-            - Prototypes with testing procedures and feedback forms
-            - Digital materials with technical requirements
-            
-            Please provide detailed content for each section, including specific timing, questions, and materials. Each section should be clearly separated by a blank line."""
-            
+            # If research_plan is a dictionary, extract relevant information
+            if isinstance(research_plan, dict):
+                research_plan_text = f"""
+                Research Objectives: {', '.join(research_plan.get('research_objectives', []))}
+                Methodology: {', '.join(research_plan.get('methodology', []))}
+                Sample Design: {', '.join(research_plan.get('sample_design', []))}
+                """
+            else:
+                research_plan_text = str(research_plan)
+
             response = self.focus_group_facilitator.invoke([
-                ("system", self.focus_group_prompt),
-                ("human", prompt)
+                SystemMessage(content=self.focus_group_prompt),
+                HumanMessage(content=f"Create a focus group discussion guide based on this research plan:\n\n{research_plan_text}")
             ])
-            
-            if not response or not response.content:
-                logging.error("Empty response received from focus group facilitator")
-                return {
-                    "discussion_guide": ["Error: No response generated"],
-                    "moderator_techniques": [],
-                    "exercises": [],
-                    "stimuli": []
-                }
-            
-            logging.info(f"Received focus group response with length: {len(response.content)}")
-            return self._parse_focus_group_response(response.content)
-            
+            return response.content
         except Exception as e:
-            logging.error(f"Error generating focus group guide: {str(e)}")
-            return {
-                "discussion_guide": [f"Error: {str(e)}"],
-                "moderator_techniques": [],
-                "exercises": [],
-                "stimuli": []
-            }
+            logger.error(f"Error generating focus group guide: {str(e)}")
+            return "Error generating focus group guide. Please try again."
 
     def _get_survey_design(self, query):
         """Generate survey design and questions."""
@@ -737,50 +689,39 @@ class PrimaryResearchConsultant:
                 "reporting_template": []
             }
 
-    def _compile_research_plan(self, research_design, focus_group_guide, survey_design, analysis_plan, client_info):
-        """Compile all research components into a structured plan."""
-        report = {
-            "research_overview": {
-                "project_scope": research_design.get("research_objectives", []),
-                "methodology": research_design.get("methodology", []),
-                "timeline": research_design.get("timeline", []),
-                "budget": research_design.get("budget_considerations", [])
-            },
-            "focus_group_research": {
-                "discussion_guide": focus_group_guide.get("discussion_guide", []),
-                "moderator_techniques": focus_group_guide.get("moderator_techniques", []),
-                "group_exercises": focus_group_guide.get("exercises", []),
-                "stimuli_materials": focus_group_guide.get("stimuli", [])
-            },
-            "survey_research": {
-                "questions": survey_design.get("survey_questions", []),
-                "response_scales": survey_design.get("response_scales", []),
-                "survey_flow": survey_design.get("survey_flow", []),
-                "quality_controls": survey_design.get("quality_controls", [])
-            },
-            "analysis_plan": {
-                "methods": analysis_plan.get("analysis_methods", []),
-                "key_metrics": analysis_plan.get("key_metrics", []),
-                "visualization": analysis_plan.get("visualization_plan", []),
-                "reporting": analysis_plan.get("reporting_template", [])
-            },
-            "appendix": {
-                "methodology": [
-                    "Research Design and Planning",
-                    "Focus Group Facilitation",
-                    "Survey Design and Implementation",
-                    "Data Analysis and Reporting"
-                ],
-                "resources": [
-                    "Sample Size Calculators",
-                    "Survey Platforms",
-                    "Analysis Software",
-                    "Reporting Templates"
-                ]
-            }
-        }
+    def _compile_research_plan(self, research_design: str, focus_group_guide: str, 
+                             survey_design: str, analysis_plan: str, client_info: dict = None) -> dict:
+        """Compile all research components into a final plan."""
+        try:
+            # Parse the responses if they're strings
+            research_design_dict = self._parse_research_design_response(research_design) if isinstance(research_design, str) else research_design
+            focus_group_dict = self._parse_focus_group_response(focus_group_guide) if isinstance(focus_group_guide, str) else focus_group_guide
+            survey_dict = self._parse_survey_response(survey_design) if isinstance(survey_design, str) else survey_design
+            analysis_dict = self._parse_analysis_response(analysis_plan) if isinstance(analysis_plan, str) else analysis_plan
 
-        return report
+            # Create the final plan structure
+            final_plan = {
+                "research_design": research_design_dict,
+                "focus_group_guide": focus_group_dict,
+                "survey_design": survey_dict,
+                "analysis_plan": analysis_dict,
+                "client_info": client_info or {},
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return final_plan
+
+        except Exception as e:
+            logger.error(f"Error compiling research plan: {str(e)}")
+            return {
+                "error": str(e),
+                "research_design": {},
+                "focus_group_guide": {},
+                "survey_design": {},
+                "analysis_plan": {},
+                "client_info": client_info or {},
+                "timestamp": datetime.now().isoformat()
+            }
 
     def get_answer(self, query: str, user_id: str, chat_history: list = None) -> dict:
         """Process a user query and return a structured response."""
@@ -810,98 +751,98 @@ class PrimaryResearchConsultant:
 
             # Add relevant sections based on query type
             if query_type == "focus_group":
-                if research_plan.get("focus_group_research"):
+                if research_plan.get("focus_group_guide"):
                     # Add Discussion Guide section
-                    if research_plan["focus_group_research"].get("discussion_guide"):
+                    if research_plan["focus_group_guide"].get("discussion_guide"):
                         response["content"]["sections"].append({
                             "title": "Discussion Guide",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["discussion_guide"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["discussion_guide"]])
                         })
                         logging.info("Added discussion guide section")
 
                     # Add Moderator Techniques section
-                    if research_plan["focus_group_research"].get("moderator_techniques"):
+                    if research_plan["focus_group_guide"].get("moderator_techniques"):
                         response["content"]["sections"].append({
                             "title": "Moderator Techniques",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["moderator_techniques"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["moderator_techniques"]])
                         })
                         logging.info("Added moderator techniques section")
 
                     # Add Group Exercises section
-                    if research_plan["focus_group_research"].get("group_exercises"):
+                    if research_plan["focus_group_guide"].get("group_exercises"):
                         response["content"]["sections"].append({
                             "title": "Group Exercises",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["group_exercises"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["group_exercises"]])
                         })
                         logging.info("Added group exercises section")
 
                     # Add Stimuli Materials section
-                    if research_plan["focus_group_research"].get("stimuli_materials"):
+                    if research_plan["focus_group_guide"].get("stimuli"):
                         response["content"]["sections"].append({
                             "title": "Stimuli Materials",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_research"]["stimuli_materials"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["stimuli"]])
                         })
                         logging.info("Added stimuli materials section")
 
                 # Add focus group guide as a structured output
-                if research_plan.get("focus_group_research"):
+                if research_plan.get("focus_group_guide"):
                     response["outputs"].append({
                         "type": "analysis",
                         "title": "Focus Group Guide",
-                        "content": research_plan["focus_group_research"]
+                        "content": research_plan["focus_group_guide"]
                     })
                     logging.info("Added focus group guide output")
 
             elif query_type == "survey":
-                if research_plan.get("survey_research"):
+                if research_plan.get("survey_design"):
                     # Add Survey Questions section
-                    if research_plan["survey_research"].get("questions"):
+                    if research_plan["survey_design"].get("survey_questions"):
                         response["content"]["sections"].append({
                             "title": "Survey Questions",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["questions"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["survey_questions"]])
                         })
                         logging.info("Added survey questions section")
 
                     # Add Response Scales section
-                    if research_plan["survey_research"].get("response_scales"):
+                    if research_plan["survey_design"].get("response_scales"):
                         response["content"]["sections"].append({
                             "title": "Response Scales",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["response_scales"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["response_scales"]])
                         })
                         logging.info("Added response scales section")
 
                     # Add Survey Flow section
-                    if research_plan["survey_research"].get("survey_flow"):
+                    if research_plan["survey_design"].get("survey_flow"):
                         response["content"]["sections"].append({
                             "title": "Survey Flow",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["survey_flow"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["survey_flow"]])
                         })
                         logging.info("Added survey flow section")
 
                     # Add Quality Controls section
-                    if research_plan["survey_research"].get("quality_controls"):
+                    if research_plan["survey_design"].get("quality_controls"):
                         response["content"]["sections"].append({
                             "title": "Quality Controls",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_research"]["quality_controls"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["quality_controls"]])
                         })
                         logging.info("Added quality controls section")
 
                 # Add survey design as a structured output
-                if research_plan.get("survey_research"):
+                if research_plan.get("survey_design"):
                     response["outputs"].append({
                         "type": "analysis",
                         "title": "Survey Design",
-                        "content": research_plan["survey_research"]
+                        "content": research_plan["survey_design"]
                     })
                     logging.info("Added survey design output")
 
             elif query_type == "analysis":
                 if research_plan.get("analysis_plan"):
                     # Add Analysis Methods section
-                    if research_plan["analysis_plan"].get("methods"):
+                    if research_plan["analysis_plan"].get("analysis_methods"):
                         response["content"]["sections"].append({
                             "title": "Analysis Methods",
-                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["methods"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["analysis_methods"]])
                         })
                         logging.info("Added analysis methods section")
 
@@ -914,18 +855,18 @@ class PrimaryResearchConsultant:
                         logging.info("Added key metrics section")
 
                     # Add Visualization Plan section
-                    if research_plan["analysis_plan"].get("visualization"):
+                    if research_plan["analysis_plan"].get("visualization_plan"):
                         response["content"]["sections"].append({
                             "title": "Visualization Plan",
-                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["visualization"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["visualization_plan"]])
                         })
                         logging.info("Added visualization plan section")
 
                     # Add Reporting Template section
-                    if research_plan["analysis_plan"].get("reporting"):
+                    if research_plan["analysis_plan"].get("reporting_template"):
                         response["content"]["sections"].append({
                             "title": "Reporting Template",
-                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["reporting"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["reporting_template"]])
                         })
                         logging.info("Added reporting template section")
 
@@ -939,45 +880,45 @@ class PrimaryResearchConsultant:
                     logging.info("Added analysis plan output")
 
             else:  # General research query
-                if research_plan.get("research_overview"):
+                if research_plan.get("research_design"):
                     # Add Project Scope section
-                    if research_plan["research_overview"].get("project_scope"):
+                    if research_plan["research_design"].get("research_objectives"):
                         response["content"]["sections"].append({
                             "title": "Project Scope",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["project_scope"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["research_objectives"]])
                         })
                         logging.info("Added project scope section")
 
                     # Add Methodology section
-                    if research_plan["research_overview"].get("methodology"):
+                    if research_plan["research_design"].get("methodology"):
                         response["content"]["sections"].append({
                             "title": "Methodology",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["methodology"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["methodology"]])
                         })
                         logging.info("Added methodology section")
 
                     # Add Timeline section
-                    if research_plan["research_overview"].get("timeline"):
+                    if research_plan["research_design"].get("timeline"):
                         response["content"]["sections"].append({
                             "title": "Timeline",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["timeline"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["timeline"]])
                         })
                         logging.info("Added timeline section")
 
                     # Add Budget section
-                    if research_plan["research_overview"].get("budget"):
+                    if research_plan["research_design"].get("budget_considerations"):
                         response["content"]["sections"].append({
                             "title": "Budget Considerations",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_overview"]["budget"]])
+                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["budget_considerations"]])
                         })
                         logging.info("Added budget section")
 
                 # Add research design as a structured output
-                if research_plan.get("research_overview"):
+                if research_plan.get("research_design"):
                     response["outputs"].append({
                         "type": "analysis",
                         "title": "Research Design",
-                        "content": research_plan["research_overview"]
+                        "content": research_plan["research_design"]
                     })
                     logging.info("Added research design output")
 
