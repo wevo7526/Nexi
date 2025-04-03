@@ -207,74 +207,110 @@ export const ReportSection = ({ title, content }: ContentSectionProps) => (
     </div>
 );
 
-export const ReportContent = ({ content }: { content: ContentItem[] | Record<string, any> }) => {
-    // Convert content to array if it's an object
-    const contentArray = Array.isArray(content) ? content : Object.entries(content).map(([key, value]) => ({
-        type: 'content',
-        title: key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-        content: value
-    }));
+export const ReportContent = ({ content }: { content: any }) => {
+    // Handle the case where content is a string
+    if (typeof content === 'string') {
+        return (
+            <div className="prose prose-sm max-w-none">
+                <div className="whitespace-pre-wrap text-gray-700">
+                    {content}
+                </div>
+            </div>
+        );
+    }
 
-    return (
-        <div className="space-y-6">
-            {contentArray.map((item, index) => {
-                if (item.type === 'content' && item.title) {
-                    return (
-                        <ContentCard key={index}>
-                            <SectionHeader 
-                                icon={sectionIcons[item.title.toLowerCase().replace(/\s+/g, '_') as keyof typeof sectionIcons] || CheckCircle2} 
-                                title={item.title} 
-                            />
-                            {Array.isArray(item.content) ? (
-                                <ul className="space-y-3">
-                                    {item.content.map((listItem: string, listIndex: number) => (
-                                        <motion.li 
-                                            key={listIndex}
-                                            initial={{ opacity: 0, x: -10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: listIndex * 0.1 }}
-                                            className="flex items-start gap-2 group"
-                                        >
-                                            <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
-                                            <span className="text-gray-700 leading-relaxed">{listItem}</span>
-                                        </motion.li>
+    // Handle the case where content is an array
+    if (Array.isArray(content)) {
+        return (
+            <ul className="space-y-3">
+                {content.map((item, index) => (
+                    <motion.li 
+                        key={index}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="flex items-start gap-2 group"
+                    >
+                        <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        <span className="text-gray-700 leading-relaxed">{String(item)}</span>
+                    </motion.li>
+                ))}
+            </ul>
+        );
+    }
+
+    // Handle the case where content is an object with sections
+    if (content && typeof content === 'object' && 'sections' in content) {
+        return (
+            <div className="space-y-6">
+                {content.sections.map((section: any, index: number) => (
+                    <ContentCard key={index}>
+                        <SectionHeader 
+                            icon={sectionIcons[section.title?.toLowerCase().replace(/\s+/g, '_') as keyof typeof sectionIcons] || CheckCircle2} 
+                            title={section.title || 'Section'} 
+                        />
+                        {Array.isArray(section.content) ? (
+                            <ul className="space-y-3">
+                                {section.content.map((item: string, listIndex: number) => (
+                                    <motion.li 
+                                        key={listIndex}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: listIndex * 0.1 }}
+                                        className="flex items-start gap-2 group"
+                                    >
+                                        <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                                        <span className="text-gray-700 leading-relaxed">{item}</span>
+                                    </motion.li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <div className="prose prose-sm max-w-none">
+                                <div className="whitespace-pre-wrap text-gray-700">
+                                    {String(section.content)}
+                                </div>
+                            </div>
+                        )}
+                    </ContentCard>
+                ))}
+            </div>
+        );
+    }
+
+    // Handle the case where content is a plain object
+    if (content && typeof content === 'object') {
+        return (
+            <div className="space-y-4">
+                {Object.entries(content).map(([key, value], index) => (
+                    <div key={index} className="space-y-2">
+                        <h3 className="font-medium text-gray-800">
+                            {key.split('_').map(word => 
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            ).join(' ')}
+                        </h3>
+                        <div className="text-gray-600">
+                            {Array.isArray(value) ? (
+                                <ul className="list-disc list-inside space-y-1">
+                                    {value.map((item: string, listIndex: number) => (
+                                        <li key={listIndex}>{String(item)}</li>
                                     ))}
                                 </ul>
-                            ) : typeof item.content === 'object' ? (
-                                <div className="space-y-4">
-                                    {Object.entries(item.content).map(([subKey, subValue], subIndex) => (
-                                        <div key={subIndex} className="space-y-2">
-                                            <h3 className="font-medium text-gray-800">
-                                                {subKey.split('_').map(word => 
-                                                    word.charAt(0).toUpperCase() + word.slice(1)
-                                                ).join(' ')}
-                                            </h3>
-                                            <div className="text-gray-600">
-                                                {Array.isArray(subValue) ? (
-                                                    <ul className="list-disc list-inside space-y-1">
-                                                        {subValue.map((listItem: string, listIndex: number) => (
-                                                            <li key={listIndex}>{listItem}</li>
-                                                        ))}
-                                                    </ul>
-                                                ) : (
-                                                    <p>{String(subValue)}</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
                             ) : (
-                                <div className="prose prose-sm max-w-none">
-                                    <div className="whitespace-pre-wrap text-gray-700">
-                                        {String(item.content)}
-                                    </div>
-                                </div>
+                                <p>{String(value)}</p>
                             )}
-                        </ContentCard>
-                    );
-                }
-                return null;
-            })}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    // Fallback for any other type of content
+    return (
+        <div className="prose prose-sm max-w-none">
+            <div className="whitespace-pre-wrap text-gray-700">
+                {String(content)}
+            </div>
         </div>
     );
 };
