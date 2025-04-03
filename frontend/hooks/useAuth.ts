@@ -1,26 +1,25 @@
 import { useState, useEffect } from 'react';
-
-interface User {
-  id: string;
-  email: string;
-}
+import { supabase } from '../lib/supabaseClient';
+import { User } from '@supabase/supabase-js';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for token in localStorage
-    const token = localStorage.getItem('token');
-    if (token) {
-      // TODO: Validate token with backend
-      // For now, just set a mock user
-      setUser({
-        id: '1',
-        email: 'user@example.com'
-      });
-    }
-    setLoading(false);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   return { user, loading };

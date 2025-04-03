@@ -309,16 +309,28 @@ def generate_report():
             # Invoke report generator
             results = report_generator.invoke(initial_state)
             
-            # Extract report content from results
-            report_content = results['messages'][-1].content
+            # Extract and structure report content
+            content = results['messages'][-1].content
             
-            # Stream the content to frontend
-            yield format_sse({
-                'type': 'report',
-                'reportId': report_id,
-                'content': report_content
-            })
+            # Format content for frontend
+            report_sections = {
+                'executive_summary': {'title': 'Executive Summary', 'content': content},
+                'findings': {'title': 'Key Findings', 'content': content},
+                'analysis': {'title': 'Analysis', 'content': content},
+                'conclusions': {'title': 'Conclusions', 'content': content},
+                'recommendations': {'title': 'Recommendations', 'content': content}
+            }
             
+            # Stream each section
+            for section_key, section_data in report_sections.items():
+                yield format_sse({
+                    'type': 'content',
+                    'section': section_key,
+                    'title': section_data['title'],
+                    'content': section_data['content']
+                })
+            
+            # Final progress update
             yield format_sse({
                 'type': 'progress',
                 'progress': 100

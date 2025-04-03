@@ -29,6 +29,18 @@ interface ResearchResponse {
     }>;
 }
 
+interface ContentItem {
+    type: string;
+    title?: string;
+    content?: string;
+    section?: string;
+}
+
+interface ContentSectionProps {
+    title: string;
+    content: string;
+}
+
 function formatContent(content: any): string {
     if (Array.isArray(content)) {
         return content.map(item => `• ${item}`).join('\n');
@@ -186,42 +198,93 @@ const sectionIcons = {
     reporting_template: BookOpen
 };
 
-function StreamContent({ content, type }: { content: any; type: string }) {
-    if (typeof content !== 'object' || content === null) return null;
+export const ReportSection = ({ title, content }: ContentSectionProps) => (
+    <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-2xl font-bold mb-4">{title}</h2>
+        <div className="prose max-w-none">
+            {content}
+        </div>
+    </div>
+);
 
-    const sections = type === 'focus_group' ? content.sections : Object.entries(content);
-    
+export const ReportContent = ({ content }: { content: ContentItem[] | Record<string, any> }) => {
+    // Convert content to array if it's an object
+    const contentArray = Array.isArray(content) ? content : Object.entries(content).map(([key, value]) => ({
+        type: 'content',
+        title: key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+        content: value
+    }));
+
     return (
-        <div className="space-y-8">
-            {sections.map((section: any, index: number) => {
-                const [key, value] = type === 'focus_group' ? [section.title, section.content] : section;
-                const Icon = sectionIcons[key as keyof typeof sectionIcons] || CheckCircle2;
-                const sectionType = key.includes('timeline') ? 'timeline' : 
-                                  key.includes('budget') ? 'budget' : 
-                                  Array.isArray(value) ? 'list' : 'default';
-
-                return (
-                    <ContentSection
-                        key={index}
-                        title={key.split('_').map((word: string) => 
-                            word.charAt(0).toUpperCase() + word.slice(1)
-                        ).join(' ')}
-                        content={value}
-                        icon={Icon}
-                        type={sectionType}
-                    />
-                );
+        <div className="space-y-6">
+            {contentArray.map((item, index) => {
+                if (item.type === 'content' && item.title) {
+                    return (
+                        <ContentCard key={index}>
+                            <SectionHeader 
+                                icon={sectionIcons[item.title.toLowerCase().replace(/\s+/g, '_') as keyof typeof sectionIcons] || CheckCircle2} 
+                                title={item.title} 
+                            />
+                            {Array.isArray(item.content) ? (
+                                <ul className="space-y-3">
+                                    {item.content.map((listItem: string, listIndex: number) => (
+                                        <motion.li 
+                                            key={listIndex}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: listIndex * 0.1 }}
+                                            className="flex items-start gap-2 group"
+                                        >
+                                            <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                                            <span className="text-gray-700 leading-relaxed">{listItem}</span>
+                                        </motion.li>
+                                    ))}
+                                </ul>
+                            ) : typeof item.content === 'object' ? (
+                                <div className="space-y-4">
+                                    {Object.entries(item.content).map(([subKey, subValue], subIndex) => (
+                                        <div key={subIndex} className="space-y-2">
+                                            <h3 className="font-medium text-gray-800">
+                                                {subKey.split('_').map(word => 
+                                                    word.charAt(0).toUpperCase() + word.slice(1)
+                                                ).join(' ')}
+                                            </h3>
+                                            <div className="text-gray-600">
+                                                {Array.isArray(subValue) ? (
+                                                    <ul className="list-disc list-inside space-y-1">
+                                                        {subValue.map((listItem: string, listIndex: number) => (
+                                                            <li key={listIndex}>{listItem}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p>{String(subValue)}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="prose prose-sm max-w-none">
+                                    <div className="whitespace-pre-wrap text-gray-700">
+                                        {String(item.content)}
+                                    </div>
+                                </div>
+                            )}
+                        </ContentCard>
+                    );
+                }
+                return null;
             })}
         </div>
     );
-}
+};
 
 export default function MultiAgentPage() {
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [researchData, setResearchData] = useState<ResearchResponse | null>(null);
-    const [streamContent, setStreamContent] = useState<Record<string, any>>({});
+    const [streamContent, setStreamContent] = useState<ContentItem[]>([]);
     const [progress, setProgress] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -239,7 +302,7 @@ export default function MultiAgentPage() {
 
         setIsLoading(true);
         setError(null);
-        setStreamContent({});
+        setStreamContent([]);
         setProgress(0);
 
         try {
@@ -274,20 +337,27 @@ export default function MultiAgentPage() {
                     if (line.startsWith('data: ')) {
                         try {
                             const data = JSON.parse(line.slice(6));
-                            
+
                             switch (data.type) {
                                 case 'status':
-                                    setStreamContent(prev => ({
+                                    setStreamContent(prev => [
                                         ...prev,
-                                        status: data.content
-                                    }));
+                                        {
+                                            type: 'status',
+                                            content: data.content
+                                        }
+                                    ]);
                                     setProgress(prev => Math.min(prev + 20, 100));
                                     break;
                                 case 'content':
-                                    setStreamContent(prev => ({
+                                    setStreamContent(prev => [
                                         ...prev,
-                                        [data.section]: data.content
-                                    }));
+                                        {
+                                            type: 'content',
+                                            title: data.section,
+                                            content: data.content
+                                        }
+                                    ]);
                                     break;
                                 case 'final':
                                     setResearchData(data.content);
@@ -381,10 +451,10 @@ export default function MultiAgentPage() {
                                     <span className="text-sm text-muted-foreground">{progress}%</span>
                                 </div>
                                 <Progress value={progress} className="h-2 bg-gray-100" />
-                                {streamContent.status && (
+                                {streamContent.find(item => item.type === 'status')?.content && (
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Loader2 className="h-4 w-4 animate-spin" />
-                                        <span>{streamContent.status}</span>
+                                        <span>{streamContent.find(item => item.type === 'status')?.content}</span>
                                     </div>
                                 )}
                             </div>
@@ -411,22 +481,21 @@ export default function MultiAgentPage() {
                     {researchData?.outputs?.map((output, index) => (
                         <div key={index} className="space-y-6">
                             <h2 className="text-xl font-semibold text-primary">{output.title}</h2>
-                            <StreamContent content={output.content} type={output.type} />
+                            <ReportContent content={output.content} />
                         </div>
                     ))}
-
-                    {Object.entries(streamContent).map(([key, value]) => (
-                        key !== 'status' && (
-                            <div key={key} className="space-y-4">
-                                <h2 className="text-xl font-semibold text-primary capitalize">
-                                    {key.replace('_', ' ')}
-                                </h2>
-                                <StreamContent 
-                                    content={typeof value === 'string' ? JSON.parse(value) : value} 
-                                    type={key}
-                                />
-                            </div>
-                        )
+                    
+                    {streamContent.filter(item => item.type === 'content').map((item, index) => (
+                        <div key={index} className="space-y-4">
+                            <h2 className="text-xl font-semibold text-primary capitalize">
+                                {item.title?.replace('_', ' ')}
+                            </h2>
+                            <ReportContent 
+                                content={typeof item.content === 'string' 
+                                    ? JSON.parse(item.content) 
+                                    : item.content || []} 
+                            />
+                        </div>
                     ))}
                 </div>
                 <div ref={messagesEndRef} />

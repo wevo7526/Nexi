@@ -1,351 +1,400 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabaseClient';
-import dynamic from 'next/dynamic';
-import { ChartData, ChartOptions, ChartType } from 'chart.js';
-import { PaperAirplaneIcon } from '@heroicons/react/24/outline';
+import { useState, useRef, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Send, CheckCircle, AlertCircle, Lightbulb, Target, TrendingUp, Users, Clock, DollarSign, CheckCircle2, ChevronRight, Search, BarChart3, ClipboardList, BookOpen } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { supabase } from "../../lib/supabaseClient";
 
-// Dynamically import chart components
-const Chart = dynamic(() => import('react-chartjs-2').then(mod => mod.Line), { ssr: false });
-const BarChart = dynamic(() => import('react-chartjs-2').then(mod => mod.Bar), { ssr: false });
-const PieChart = dynamic(() => import('react-chartjs-2').then(mod => mod.Pie), { ssr: false });
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-// Register Chart.js components
-if (typeof window !== 'undefined') {
-    const {
-        Chart: ChartJS,
-        CategoryScale,
-        LinearScale,
-        PointElement,
-        LineElement,
-        BarElement,
-        ArcElement,
-        Title,
-        Tooltip,
-        Legend
-    } = require('chart.js');
-    
-    ChartJS.register(
-        CategoryScale,
-        LinearScale,
-        PointElement,
-        LineElement,
-        BarElement,
-        ArcElement,
-        Title,
-        Tooltip,
-        Legend
+interface ContentItem {
+    type: string;
+    title?: string;
+    content?: any;
+    section?: string;
+}
+
+interface ContentSectionProps {
+    title: string;
+    content: any;
+    icon?: any;
+    type?: 'timeline' | 'budget' | 'list' | 'default';
+}
+
+function SectionHeader({ icon: Icon, title }: { icon: any; title: string }) {
+    return (
+        <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-primary/10 rounded-xl">
+                <Icon className="w-5 h-5 text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+        </div>
     );
 }
 
-interface ChartDataProps {
-    type: 'line' | 'bar' | 'pie';
-    data: ChartData<ChartType>;
-    options: ChartOptions<ChartType>;
+function ContentCard({ children, className }: { children: React.ReactNode; className?: string }) {
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cn(
+                "bg-white rounded-xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow",
+                className
+            )}
+        >
+            {children}
+        </motion.div>
+    );
 }
 
-interface ChatMessage {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    created_at: string;
+function ContentSection({ 
+    title, 
+    content, 
+    icon: Icon = CheckCircle2,
+    type = 'default'
+}: ContentSectionProps) {
+    return (
+        <ContentCard>
+            <SectionHeader icon={Icon} title={title} />
+            {Array.isArray(content) ? (
+                <ul className="space-y-3">
+                    {content.map((item, index) => (
+                        <motion.li 
+                            key={index} 
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            className="flex items-start gap-2 group"
+                        >
+                            <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                            <span className="text-gray-700 leading-relaxed">{item}</span>
+                        </motion.li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="prose prose-sm max-w-none">
+                    <div className="whitespace-pre-wrap text-gray-700">
+                        {String(content)}
+                    </div>
+                </div>
+            )}
+        </ContentCard>
+    );
 }
 
-interface StructuredOutput {
-    type: 'text' | 'table' | 'chart' | 'analysis' | 'recommendation' | 'metric';
-    content: any;
-    title?: string;
-    description?: string;
-}
+const sectionIcons = {
+    problem_analysis: Lightbulb,
+    market_research: Search,
+    competitive_analysis: Target,
+    growth_strategy: TrendingUp,
+    team_structure: Users,
+    timeline: Clock,
+    budget: DollarSign,
+    metrics: BarChart3,
+    implementation: ClipboardList,
+    recommendations: CheckCircle2,
+    next_steps: BookOpen
+};
+
+export const ReportContent = ({ content }: { content: any }) => {
+    // Handle the case where content is a string
+    if (typeof content === 'string') {
+        return (
+            <div className="prose prose-sm max-w-none">
+                <div className="whitespace-pre-wrap text-gray-700">
+                    {content}
+                </div>
+            </div>
+        );
+    }
+
+    // Handle the case where content is an array
+    if (Array.isArray(content)) {
+        return (
+            <ul className="space-y-3">
+                {content.map((item, index) => (
+                    <motion.li 
+                        key={index}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="flex items-start gap-2 group"
+                    >
+                        <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        <span className="text-gray-700 leading-relaxed">{String(item)}</span>
+                    </motion.li>
+                ))}
+            </ul>
+        );
+    }
+
+    // Handle the case where content is an object with sections
+    if (content && typeof content === 'object' && 'sections' in content) {
+        return (
+            <div className="space-y-6">
+                {content.sections.map((section: any, index: number) => (
+                    <ContentCard key={index}>
+                        <SectionHeader 
+                            icon={sectionIcons[section.title?.toLowerCase().replace(/\s+/g, '_') as keyof typeof sectionIcons] || CheckCircle2} 
+                            title={section.title || 'Section'} 
+                        />
+                        {Array.isArray(section.content) ? (
+                            <ul className="space-y-3">
+                                {section.content.map((item: string, listIndex: number) => (
+                                    <motion.li 
+                                        key={listIndex}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: listIndex * 0.1 }}
+                                        className="flex items-start gap-2 group"
+                                    >
+                                        <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                                        <span className="text-gray-700 leading-relaxed">{item}</span>
+                                    </motion.li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <div className="prose prose-sm max-w-none">
+                                <div className="whitespace-pre-wrap text-gray-700">
+                                    {String(section.content)}
+                                </div>
+                            </div>
+                        )}
+                    </ContentCard>
+                ))}
+            </div>
+        );
+    }
+
+    // Handle the case where content is a plain object
+    if (content && typeof content === 'object') {
+        return (
+            <div className="space-y-4">
+                {Object.entries(content).map(([key, value], index) => (
+                    <div key={index} className="space-y-2">
+                        <h3 className="font-medium text-gray-800">
+                            {key.split('_').map(word => 
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            ).join(' ')}
+                        </h3>
+                        <div className="text-gray-600">
+                            {Array.isArray(value) ? (
+                                <ul className="list-disc list-inside space-y-1">
+                                    {value.map((item: string, listIndex: number) => (
+                                        <li key={listIndex}>{String(item)}</li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p>{String(value)}</p>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    // Fallback for any other type of content
+    return (
+        <div className="prose prose-sm max-w-none">
+            <div className="whitespace-pre-wrap text-gray-700">
+                {String(content)}
+            </div>
+        </div>
+    );
+};
 
 export default function ConsultantPage() {
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [streamingMessage, setStreamingMessage] = useState('');
-    const [structuredOutputs, setStructuredOutputs] = useState<StructuredOutput[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [streamContent, setStreamContent] = useState<ContentItem[]>([]);
     const [progress, setProgress] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const router = useRouter();
 
-    useEffect(() => {
-        checkAuth();
-        fetchMessages();
-    }, []);
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
 
     useEffect(() => {
         scrollToBottom();
-    }, [messages, streamingMessage]);
-
-    const checkAuth = async () => {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session) {
-            router.push('/auth');
-        }
-    };
-
-    const fetchMessages = async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return;
-
-            const response = await fetch('http://localhost:5000/api/get_answer', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`
-                },
-                body: JSON.stringify({
-                    query: "get_history",
-                    user_id: session.user.id
-                })
-            });
-            const data = await response.json();
-            if (data.success) {
-                setMessages(data.messages || []);
-            }
-        } catch (error) {
-            console.error('Error fetching messages:', error);
-        }
-    };
+    }, [streamContent]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!query.trim() || isLoading) return;
+        if (!query.trim()) return;
 
         setIsLoading(true);
-        setStreamingMessage('');
-        setStructuredOutputs([]);
+        setError(null);
+        setStreamContent([]);
+        setProgress(0);
 
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return;
+            // Get the current session
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError || !session) {
+                setError('Please log in to continue');
+                return;
+            }
 
-            const response = await fetch('http://localhost:5000/api/get_answer', {
+            const response = await fetch(`${BACKEND_URL}/api/get_answer`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`
                 },
                 body: JSON.stringify({
-                    query: query,
+                    query,
                     user_id: session.user.id,
-                    chat_history: messages.map(msg => ({
-                        role: msg.role,
-                        content: msg.content
-                    }))
+                    chat_history: []
                 })
             });
 
+            if (response.status === 401) {
+                setError('Session expired. Please log in again.');
+                // Optionally redirect to login page
+                return;
+            }
+
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch response');
             }
 
             const data = await response.json();
             
-            if (data.success) {
-                // Add user message
-                setMessages(prev => [{
-                    id: Date.now().toString(),
-                    role: 'user',
-                    content: query,
-                    created_at: new Date().toISOString()
-                }, ...prev]);
-
-                // Add assistant message with structured output
-                if (data.answer) {
-                    // Create a message with the main content
-                    setMessages(prev => [{
-                        id: (Date.now() + 1).toString(),
-                        role: 'assistant',
-                        content: data.answer.content || 'Analysis complete.',
-                        created_at: new Date().toISOString()
-                    }, ...prev]);
-                    
-                    // Handle structured output
-                    if (data.answer.outputs && Array.isArray(data.answer.outputs)) {
-                        setStructuredOutputs(prev => [...data.answer.outputs, ...prev]);
-                    }
-                }
-                
-                setQuery('');
-            } else {
-                throw new Error(data.error || 'Failed to get response');
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to get answer');
             }
-        } catch (error) {
-            console.error('Error during chat:', error);
-            // Add error message to chat
-            setMessages(prev => [{
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: 'Sorry, I encountered an error while processing your request. Please try again.',
-                created_at: new Date().toISOString()
-            }, ...prev]);
+
+            // Structure the response for display
+            const answer = data.answer;
+            if (answer && answer.outputs) {
+                answer.outputs.forEach((output: any) => {
+                    if (output.type === 'analysis' && output.content) {
+                        setStreamContent(prev => [
+                            ...prev,
+                            {
+                                type: 'content',
+                                title: output.title,
+                                content: output.content
+                            }
+                        ]);
+                    }
+                });
+            }
+
+            setProgress(100);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
             setIsLoading(false);
         }
     };
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    const renderChart = (chartData: ChartDataProps) => {
-        const { type, data, options } = chartData;
-        
-        switch (type) {
-            case 'line':
-                return <Chart data={data as ChartData<'line'>} options={options as ChartOptions<'line'>} />;
-            case 'bar':
-                return <BarChart data={data as ChartData<'bar'>} options={options as ChartOptions<'bar'>} />;
-            case 'pie':
-                return <PieChart data={data as ChartData<'pie'>} options={options as ChartOptions<'pie'>} />;
-            default:
-                return <div>Unsupported chart type</div>;
-        }
-    };
-
-    const renderStructuredOutput = (output: StructuredOutput) => {
-        switch (output.type) {
-            case 'analysis':
-                return (
-                    <div className="bg-white rounded-lg shadow p-4 mb-4">
-                        <h3 className="text-lg font-semibold mb-3">{output.title}</h3>
-                        <div className="space-y-4">
-                            {output.content.sections.map((section: any, index: number) => (
-                                <div key={index} className="border-t pt-4 first:border-t-0 first:pt-0">
-                                    <h4 className="font-medium mb-2">{section.title}</h4>
-                                    <div className="text-gray-600">
-                                        {section.content}
-                                    </div>
-                                    {section.chart && (
-                                        <div className="mt-4">
-                                            {renderChart(section.chart)}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                );
-            case 'recommendation':
-                return (
-                    <div className="bg-white rounded-lg shadow p-4 mb-4">
-                        <h3 className="text-lg font-semibold mb-3">{output.title}</h3>
-                        <div className="space-y-4">
-                            {output.content.recommendations.map((rec: any, index: number) => (
-                                <div key={index} className="border-t pt-4 first:border-t-0 first:pt-0">
-                                    <div className="flex items-start gap-2">
-                                        <span className={`px-2 py-1 rounded text-xs ${
-                                            rec.priority === 'High' ? 'bg-red-100 text-red-800' :
-                                            rec.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-green-100 text-green-800'
-                                        }`}>
-                                            {rec.priority}
-                                        </span>
-                                        <h4 className="font-medium">{rec.title}</h4>
-                                    </div>
-                                    <p className="text-gray-600 mt-2">{rec.description}</p>
-                                    {rec.impact && (
-                                        <div className="mt-2 flex items-center gap-2">
-                                            <span className="text-sm text-gray-500">Expected Impact:</span>
-                                            <span className={`text-sm font-medium ${
-                                                rec.impact === 'High' ? 'text-red-600' :
-                                                rec.impact === 'Medium' ? 'text-yellow-600' :
-                                                'text-green-600'
-                                            }`}>
-                                                {rec.impact}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                );
-            default:
-                return null;
-        }
-    };
-
     return (
-        <div className="container mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold mb-8">AI Business Consultant</h1>
-
-            {/* Input Form */}
-            <form onSubmit={handleSubmit} className="mb-8">
-                <div className="mb-4">
-                    <label htmlFor="query" className="block text-sm font-medium text-gray-700 mb-2">
-                        Ask your business question:
-                    </label>
-                    <textarea
-                        id="query"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        className="w-full h-64 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter your business question here..."
-                        required
-                        disabled={isLoading}
-                    />
+        <div className="container mx-auto p-4 max-w-4xl">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+            >
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent mb-4">
+                        Business Strategy Consultant
+                    </h1>
+                    <Card className="border-gray-100 shadow-sm">
+                        <CardContent className="pt-6">
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={query}
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        placeholder="Describe your business challenge..."
+                                        className="flex-1 border-gray-200 focus:border-primary/50 focus:ring-primary/50"
+                                        disabled={isLoading}
+                                    />
+                                    <Button 
+                                        type="submit" 
+                                        disabled={isLoading}
+                                        className="bg-primary hover:bg-primary/90"
+                                    >
+                                        {isLoading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Send className="h-4 w-4" />
+                                        )}
+                                    </Button>
+                                </div>
+                            </form>
+                        </CardContent>
+                    </Card>
                 </div>
-                
-                <button
-                    type="submit"
-                    disabled={isLoading || !query.trim()}
-                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            </motion.div>
+
+            <AnimatePresence>
+                {error && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <Alert variant="destructive" className="mb-6">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {isLoading && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
                 >
-                    {isLoading ? 'Processing...' : 'Send Question'}
-                </button>
-            </form>
-
-            {/* Chat Messages */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
-                <h2 className="text-xl font-semibold mb-4">Conversation History:</h2>
-                <div className="space-y-4">
-                    {messages.map((message) => (
-                        <div
-                            key={message.id}
-                            className={`flex ${
-                                message.role === 'user' ? 'justify-end' : 'justify-start'
-                            }`}
-                        >
-                            <div
-                                className={`max-w-[80%] rounded-lg p-4 ${
-                                    message.role === 'user'
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-white text-gray-800 border border-gray-200'
-                                }`}
-                            >
-                                <p className="whitespace-pre-wrap">{message.content}</p>
-                                <p className="text-xs mt-2 opacity-70">
-                                    {new Date(message.created_at).toLocaleString()}
-                                </p>
+                    <Card className="mb-6 border-gray-100 shadow-sm">
+                        <CardContent className="pt-6">
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-700">Analysis Progress</span>
+                                    <span className="text-sm text-muted-foreground">{progress}%</span>
+                                </div>
+                                <Progress value={progress} className="h-2 bg-gray-100" />
+                                {streamContent.find(item => item.type === 'status')?.content && (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>{streamContent.find(item => item.type === 'status')?.content}</span>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
-                    {streamingMessage && (
-                        <div className="flex justify-start">
-                            <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                <p className="whitespace-pre-wrap">{streamingMessage}</p>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                </div>
-            </div>
-
-            {/* Structured Outputs */}
-            {structuredOutputs.length > 0 && (
-                <div className="space-y-4">
-                    {structuredOutputs.map((output, index) => (
-                        <div key={index}>
-                            {renderStructuredOutput(output)}
-                        </div>
-                    ))}
-                </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
             )}
+
+            <ScrollArea className="h-[600px] rounded-xl border border-gray-100 p-4">
+                <div className="space-y-8">
+                    {streamContent.filter(item => item.type === 'content').map((item, index) => (
+                        <div key={index} className="space-y-4">
+                            <h2 className="text-xl font-semibold text-primary capitalize">
+                                {item.title?.replace('_', ' ')}
+                            </h2>
+                            <ReportContent content={item.content} />
+                        </div>
+                    ))}
+                </div>
+                <div ref={messagesEndRef} />
+            </ScrollArea>
         </div>
     );
 } 
