@@ -3,11 +3,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Send, CheckCircle, AlertCircle, Search, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface ChatMessage {
     id: string;
     role: 'user' | 'assistant';
-    content: string;
+    content: string | MessageContent;
     created_at: string;
 }
 
@@ -18,12 +27,162 @@ interface StructuredOutput {
     description?: string;
 }
 
+interface MessageContent {
+    content: string;
+    metrics?: Array<{
+        label: string;
+        value: string;
+        trend: number;
+    }>;
+    description?: string;
+    pros?: string[];
+    cons?: string[];
+}
+
+function formatContent(content: any): string {
+    if (Array.isArray(content)) {
+        return content.map(item => `• ${item}`).join('\n');
+    }
+    if (typeof content === 'object') {
+        return Object.entries(content)
+            .map(([key, value]) => {
+                const formattedKey = key.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+                return `### ${formattedKey}\n${formatContent(value)}`;
+            })
+            .join('\n\n');
+    }
+    return String(content);
+}
+
+function SectionHeader({ icon: Icon, title }: { icon: any; title: string }) {
+    return (
+        <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-primary/10 rounded-xl">
+                <Icon className="w-5 h-5 text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+        </div>
+    );
+}
+
+function ContentCard({ children, className }: { children: React.ReactNode; className?: string }) {
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cn(
+                "bg-white rounded-xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow",
+                className
+            )}
+        >
+            {children}
+        </motion.div>
+    );
+}
+
+function AnalysisCard({ title, content, type, icon }: { title: string; content: any; type: string; icon: string }) {
+    return (
+        <ContentCard>
+            <SectionHeader icon={icon} title={title} />
+            <div className="prose prose-sm max-w-none">
+                <div className="whitespace-pre-wrap text-gray-700">
+                    {formatContent(content)}
+                </div>
+            </div>
+        </ContentCard>
+    );
+}
+
+function SolutionCard({ solution, index }: { solution: MessageContent; index: number }) {
+    return (
+        <ContentCard>
+            <SectionHeader icon={CheckCircle} title={`Solution ${index + 1}`} />
+            <div className="space-y-6">
+                <div>
+                    <h3 className="font-medium text-gray-800 mb-2">Description</h3>
+                    <p className="text-gray-600">{solution.description || solution.content}</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 className="font-medium text-green-600 mb-2 flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Pros
+                        </h3>
+                        <ul className="space-y-2">
+                            {solution.pros?.map((pro, idx) => (
+                                <motion.li 
+                                    key={idx}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    className="flex items-start gap-2 group"
+                                >
+                                    <ChevronRight className="w-4 h-4 text-green-600 mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                                    <span className="text-gray-700">{pro}</span>
+                                </motion.li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 className="font-medium text-red-600 mb-2 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4" />
+                            Cons
+                        </h3>
+                        <ul className="space-y-2">
+                            {solution.cons?.map((con, idx) => (
+                                <motion.li 
+                                    key={idx}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    className="flex items-start gap-2 group"
+                                >
+                                    <ChevronRight className="w-4 h-4 text-red-600 mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                                    <span className="text-gray-700">{con}</span>
+                                </motion.li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </ContentCard>
+    );
+}
+
+function MetricsCard({ metrics }: { metrics: any }) {
+    return (
+        <ContentCard>
+            <SectionHeader icon={Search} title="Key Metrics" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {metrics.map((metric: any, index: number) => (
+                    <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                        <div className="text-2xl font-bold text-primary mb-1">{metric.value}</div>
+                        <div className="text-sm text-gray-600 mb-2">{metric.label}</div>
+                        <div className={`text-lg ${metric.trend > 0 ? 'text-green-600' : metric.trend < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                            {metric.trend > 0 ? '↑' : metric.trend < 0 ? '↓' : '→'}
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </ContentCard>
+    );
+}
+
 export default function CaseSolverPage() {
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [streamingMessage, setStreamingMessage] = useState('');
-    const [structuredOutputs, setStructuredOutputs] = useState<StructuredOutput[]>([]);
+    const [progress, setProgress] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
@@ -65,6 +224,7 @@ export default function CaseSolverPage() {
             }
         } catch (error) {
             console.error('Error fetching messages:', error);
+            setError('Failed to fetch message history');
         }
     };
 
@@ -73,8 +233,9 @@ export default function CaseSolverPage() {
         if (!query.trim() || isLoading) return;
 
         setIsLoading(true);
+        setError(null);
         setStreamingMessage('');
-        setStructuredOutputs([]);
+        setProgress(0);
 
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -103,7 +264,6 @@ export default function CaseSolverPage() {
             const data = await response.json();
             
             if (data.success) {
-                // Add user message
                 setMessages(prev => [{
                     id: Date.now().toString(),
                     role: 'user',
@@ -111,28 +271,39 @@ export default function CaseSolverPage() {
                     created_at: new Date().toISOString()
                 }, ...prev]);
 
-                // Add assistant message with structured output
                 if (data.answer) {
+                    let formattedContent = '';
+                    
+                    if (typeof data.answer === 'string') {
+                        formattedContent = formatContent(data.answer);
+                    } else if (data.answer.content) {
+                        if (Array.isArray(data.answer.content)) {
+                            formattedContent = data.answer.content.map((item: any) => formatContent(item)).join('\n\n');
+                        } else if (data.answer.content.sections) {
+                            formattedContent = data.answer.content.sections.map((section: any) => formatContent(section.content)).join('\n\n');
+                        } else {
+                            formattedContent = formatContent(data.answer.content);
+                        }
+                    } else {
+                        formattedContent = formatContent(data.answer);
+                    }
+                    
                     setMessages(prev => [{
                         id: (Date.now() + 1).toString(),
                         role: 'assistant',
-                        content: data.answer.content?.sections?.[0]?.content || 'Analysis complete.',
+                        content: formattedContent,
                         created_at: new Date().toISOString()
                     }, ...prev]);
-                    
-                    // Add structured output if available
-                    if (data.answer.type) {
-                        setStructuredOutputs(prev => [data.answer, ...prev]);
-                    }
                 }
                 
                 setQuery('');
+                setProgress(100);
             } else {
                 throw new Error(data.error || 'Failed to get response');
             }
         } catch (error) {
             console.error('Error during chat:', error);
-            // Add error message to chat
+            setError('An error occurred while processing your request');
             setMessages(prev => [{
                 id: Date.now().toString(),
                 role: 'assistant',
@@ -145,281 +316,169 @@ export default function CaseSolverPage() {
     };
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
     return (
-        <div className="case-solver-page">
-            <div className="query-section">
-                <div className="query-container">
-                    <h1 className="page-title">Case Solver</h1>
-                    <form onSubmit={handleSubmit} className="query-form">
-                        <div className="input-wrapper">
-                            <input
-                                type="text"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder="Enter your case study..."
-                                disabled={isLoading}
-                                className="query-input"
-                            />
-                            <button
-                                type="submit"
-                                disabled={isLoading || !query.trim()}
-                                className="submit-button"
-                            >
-                                {isLoading ? (
-                                    <div className="button-content">
-                                        <div className="loading-spinner"></div>
-                                        <span>Processing</span>
-                                    </div>
-                                ) : (
-                                    <div className="button-content">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                        </svg>
-                                        <span>Solve</span>
+        <div className="container mx-auto p-4 max-w-4xl">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+            >
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent mb-4">
+                        Case Solver
+                    </h1>
+                    <Card className="border-gray-100 shadow-sm">
+                        <CardContent className="pt-6">
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={query}
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        placeholder="Enter your case study or business problem..."
+                                        className="flex-1 border-gray-200 focus:border-primary/50 focus:ring-primary/50"
+                                        disabled={isLoading}
+                                    />
+                                    <Button 
+                                        type="submit" 
+                                        disabled={isLoading}
+                                        className="bg-primary hover:bg-primary/90"
+                                    >
+                                        {isLoading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Send className="h-4 w-4" />
+                                        )}
+                                    </Button>
+                                </div>
+                            </form>
+                        </CardContent>
+                    </Card>
+                </div>
+            </motion.div>
+
+            <AnimatePresence>
+                {error && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <Alert variant="destructive" className="mb-6">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {isLoading && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                >
+                    <Card className="mb-6 border-gray-100 shadow-sm">
+                        <CardContent className="pt-6">
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-700">Analysis Progress</span>
+                                    <span className="text-sm text-muted-foreground">{progress}%</span>
+                                </div>
+                                <Progress value={progress} className="h-2 bg-gray-100" />
+                                {streamingMessage && (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>{streamingMessage}</span>
                                     </div>
                                 )}
-                            </button>
-                        </div>
-                        {isLoading && (
-                            <div className="progress-bar">
-                                <div className="progress-indicator"></div>
                             </div>
-                        )}
-                    </form>
-                </div>
-            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+            )}
 
-            <div className="content-section">
-                <div className="messages-container">
-                    {streamingMessage && (
-                        <div className="message streaming">
-                            <div className="message-content">
-                                {streamingMessage}
-                            </div>
-                        </div>
-                    )}
+            <ScrollArea className="h-[600px] rounded-xl border border-gray-100 p-4">
+                <div className="space-y-8">
                     {messages.map((message) => (
-                        <div key={message.id} className={`message ${message.role}`}>
-                            <div className="message-content">
-                                {message.content}
-                            </div>
-                        </div>
+                        <motion.div
+                            key={message.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`message ${message.role}`}
+                        >
+                            {message.role === 'assistant' ? (
+                                <div className="space-y-6">
+                                    {typeof message.content === 'string' && (
+                                        <>
+                                            {message.content.includes('Problem Statement') && (
+                                                <AnalysisCard 
+                                                    title="Problem Analysis" 
+                                                    content={message.content} 
+                                                    type="analysis"
+                                                    icon="🔍"
+                                                />
+                                            )}
+                                            {message.content.includes('Based on the case description') && (
+                                                <AnalysisCard 
+                                                    title="Key Factors Analysis" 
+                                                    content={message.content} 
+                                                    type="factors"
+                                                    icon="⚖️"
+                                                />
+                                            )}
+                                            {message.content.includes('Based on the business case provided') && (
+                                                <AnalysisCard 
+                                                    title="Constraints Analysis" 
+                                                    content={message.content} 
+                                                    type="constraints"
+                                                    icon="⚠️"
+                                                />
+                                            )}
+                                            {message.content.includes('Solution 1:') && (
+                                                <div className="space-y-6">
+                                                    <div className="flex items-center gap-3 mb-4">
+                                                        <h2 className="text-xl font-semibold text-gray-800">Proposed Solutions</h2>
+                                                        <p className="text-sm text-gray-500">Detailed analysis of potential approaches</p>
+                                                    </div>
+                                                    {message.content.split(/(?=Solution \d+:)/).map((solution, index) => (
+                                                        <SolutionCard 
+                                                            key={index} 
+                                                            solution={{ content: solution, description: solution.split('Description:')[1]?.split('1.')[0]?.trim() || '' }} 
+                                                            index={index}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                    {typeof message.content !== 'string' && message.content.metrics && (
+                                        <MetricsCard 
+                                            metrics={message.content.metrics} 
+                                        />
+                                    )}
+                                </div>
+                            ) : (
+                                <ContentCard>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                            <span className="text-primary">👤</span>
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-600">Your Input</span>
+                                    </div>
+                                    <div className="text-gray-700">
+                                        {typeof message.content === 'string' ? message.content : message.content.content}
+                                    </div>
+                                </ContentCard>
+                            )}
+                        </motion.div>
                     ))}
                     <div ref={messagesEndRef} />
                 </div>
-            </div>
-
-            <style jsx>{`
-                .case-solver-page {
-                    height: 100vh;
-                    display: flex;
-                    flex-direction: column;
-                    background: #ffffff;
-                }
-
-                .query-section {
-                    position: sticky;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    background: #ffffff;
-                    z-index: 100;
-                    border-bottom: 1px solid #e2e8f0;
-                }
-
-                .query-container {
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    padding: 1.5rem 2rem;
-                }
-
-                .page-title {
-                    font-size: 1.5rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 1.5rem;
-                }
-
-                .query-form {
-                    max-width: 800px;
-                    margin: 0 auto;
-                }
-
-                .input-wrapper {
-                    display: flex;
-                    align-items: center;
-                    background: #ffffff;
-                    border-radius: 12px;
-                    border: 1px solid #e2e8f0;
-                    transition: all 0.2s;
-                    position: relative;
-                }
-
-                .input-wrapper:focus-within {
-                    border-color: #3b82f6;
-                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-                }
-
-                .query-input {
-                    flex: 1;
-                    padding: 1rem 1.5rem;
-                    border: none;
-                    border-radius: 12px;
-                    font-size: 1rem;
-                    transition: all 0.2s;
-                    background: transparent;
-                    padding-right: 140px; /* Make space for the button */
-                }
-
-                .query-input:focus {
-                    outline: none;
-                }
-
-                .query-input::placeholder {
-                    color: #94a3b8;
-                }
-
-                .submit-button {
-                    position: absolute;
-                    right: 0.5rem;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    padding: 0.75rem 1.25rem;
-                    background: #3b82f6;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                    white-space: nowrap;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    min-width: 100px;
-                }
-
-                .button-content {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-
-                .loading-spinner {
-                    width: 16px;
-                    height: 16px;
-                    border: 2px solid #ffffff;
-                    border-top-color: transparent;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                }
-
-                @keyframes spin {
-                    to {
-                        transform: rotate(360deg);
-                    }
-                }
-
-                .submit-button:disabled {
-                    background: #94a3b8;
-                    cursor: not-allowed;
-                }
-
-                .submit-button:hover:not(:disabled) {
-                    background: #2563eb;
-                    transform: translateY(-50%) scale(1.02);
-                }
-
-                .progress-bar {
-                    height: 2px;
-                    background: #e2e8f0;
-                    margin-top: 0.5rem;
-                    border-radius: 1px;
-                    overflow: hidden;
-                }
-
-                .progress-indicator {
-                    height: 100%;
-                    background: #3b82f6;
-                    width: 0%;
-                    animation: progress 2s ease-in-out infinite;
-                }
-
-                @keyframes progress {
-                    0% { width: 0%; }
-                    50% { width: 70%; }
-                    100% { width: 100%; }
-                }
-
-                .content-section {
-                    flex: 1;
-                    overflow: hidden;
-                    background: #ffffff;
-                }
-
-                .messages-container {
-                    height: 100%;
-                    overflow-y: auto;
-                    padding: 2rem;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2rem;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                }
-
-                .message {
-                    max-width: 800px;
-                    margin: 0 auto;
-                    width: 100%;
-                }
-
-                .message.user {
-                    align-self: flex-end;
-                }
-
-                .message.assistant {
-                    align-self: flex-start;
-                }
-
-                .message-content {
-                    padding: 1.5rem;
-                    border-radius: 16px;
-                    background: #ffffff;
-                    white-space: pre-wrap;
-                    line-height: 1.6;
-                    border: 1px solid #e2e8f0;
-                }
-
-                .message.user .message-content {
-                    background: #3b82f6;
-                    color: white;
-                    border: none;
-                }
-
-                .message.streaming .message-content {
-                    background: #ffffff;
-                    border: 1px solid #e2e8f0;
-                }
-
-                @media (max-width: 768px) {
-                    .query-container {
-                        padding: 1rem;
-                    }
-
-                    .messages-container {
-                        padding: 1rem;
-                    }
-
-                    .message-content {
-                        padding: 1rem;
-                    }
-                }
-            `}</style>
+            </ScrollArea>
         </div>
     );
 } 
