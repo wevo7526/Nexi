@@ -7,6 +7,7 @@ from datetime import datetime
 import re
 import json
 from langchain.schema import SystemMessage, HumanMessage
+from typing import Dict
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -617,40 +618,74 @@ class PrimaryResearchConsultant:
                 "stimuli": []
             }
 
-    def _parse_survey_response(self, response):
-        """Parse and structure survey design with improved error handling."""
+    def _parse_survey_response(self, response: str) -> Dict:
+        """Parse the survey design response into structured format."""
         try:
-            if not response:
-                raise ValueError("Empty response received")
-
-            sections = {
-                "survey_questions": [],
-                "response_scales": [],
-                "survey_flow": [],
-                "quality_controls": []
+            # Split response into sections
+            sections = response.split('\n\n')
+            survey_data = {
+                "survey_objective": "",
+                "target_audience": "",
+                "sample_size": "",
+                "sampling_method": "",
+                "questions": [],
+                "response_options": [],
+                "analysis_plan": []
             }
 
-            for section in sections.keys():
-                try:
-                    sections[section] = self._extract_section(response, section.replace('_', ' ').title())
-                except Exception as e:
-                    logging.error(f"Error parsing section {section}: {str(e)}")
+            current_section = None
+            for section in sections:
+                section = section.strip()
+                if not section:
                     continue
 
-            # Validate required sections
-            if not sections["survey_questions"]:
-                raise ValueError("Missing critical survey sections")
+                # Check for section headers
+                if section.startswith("Survey Objective:"):
+                    current_section = "survey_objective"
+                    survey_data[current_section] = section.replace("Survey Objective:", "").strip()
+                elif section.startswith("Target Audience:"):
+                    current_section = "target_audience"
+                    survey_data[current_section] = section.replace("Target Audience:", "").strip()
+                elif section.startswith("Sample Size:"):
+                    current_section = "sample_size"
+                    survey_data[current_section] = section.replace("Sample Size:", "").strip()
+                elif section.startswith("Sampling Method:"):
+                    current_section = "sampling_method"
+                    survey_data[current_section] = section.replace("Sampling Method:", "").strip()
+                elif section.startswith("Questions:"):
+                    current_section = "questions"
+                elif section.startswith("Response Options:"):
+                    current_section = "response_options"
+                elif section.startswith("Analysis Plan:"):
+                    current_section = "analysis_plan"
+                elif current_section in ["questions", "response_options", "analysis_plan"]:
+                    # Handle bullet points
+                    if section.startswith("•"):
+                        items = [item.strip().lstrip("•").strip() for item in section.split("\n") if item.strip()]
+                        survey_data[current_section].extend(items)
+                    else:
+                        survey_data[current_section].append(section.strip())
 
-            return sections
+            # Validate required sections
+            required_sections = ["survey_objective", "target_audience", "questions"]
+            missing_sections = [section for section in required_sections if not survey_data[section]]
+            if missing_sections:
+                raise ValueError(f"Missing required survey sections: {', '.join(missing_sections)}")
+
+            return survey_data
 
         except Exception as e:
-            logging.error(f"Error in survey parsing: {str(e)}")
+            logger.error(f"Error in survey parsing: {str(e)}")
+            # Return a structured error response
             return {
                 "error": str(e),
-                "survey_questions": ["Error: Could not parse survey questions"],
-                "response_scales": [],
-                "survey_flow": [],
-                "quality_controls": []
+                "survey_objective": "Error parsing survey objective",
+                "target_audience": "Error parsing target audience",
+                "sample_size": "Not specified",
+                "sampling_method": "Not specified",
+                "questions": ["Error parsing questions"],
+                "response_options": ["Error parsing response options"],
+                "analysis_plan": ["Error parsing analysis plan"]
             }
 
     def _parse_analysis_response(self, response):

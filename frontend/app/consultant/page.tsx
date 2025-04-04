@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Send, CheckCircle, AlertCircle, Lightbulb, Target, TrendingUp, Users, Clock, DollarSign, CheckCircle2, ChevronRight, Search, BarChart3, ClipboardList, BookOpen, PlayCircle, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -51,19 +51,52 @@ const ContentSection = ({ title, content }: ContentSectionProps) => {
                 return Lightbulb;
             case 'implementation':
                 return PlayCircle;
+            case 'survey objective':
+                return Target;
+            case 'target audience':
+                return Users;
+            case 'sample size':
+                return BarChart3;
+            case 'sampling method':
+                return ClipboardList;
+            case 'questions':
+                return FileText;
+            case 'response options':
+                return CheckCircle;
+            case 'analysis plan':
+                return Lightbulb;
             default:
                 return FileText;
         }
     };
 
+    const renderContent = () => {
+        if (Array.isArray(content)) {
+            return (
+                <ul className="list-disc list-inside space-y-2">
+                    {content.map((item, index) => (
+                        <li key={index} className="text-gray-700 dark:text-gray-300">
+                            {item}
+                        </li>
+                    ))}
+                </ul>
+            );
+        }
+        return (
+            <div className="prose dark:prose-invert max-w-none">
+                {content.split('\n').map((line, index) => (
+                    <p key={index} className="mb-2 text-gray-700 dark:text-gray-300">
+                        {line}
+                    </p>
+                ))}
+            </div>
+        );
+    };
+
     return (
         <ContentCard>
             <SectionHeader title={title} icon={getIcon()} />
-            <div className="prose dark:prose-invert max-w-none">
-                {content.split('\n').map((line, index) => (
-                    <p key={index} className="mb-2">{line}</p>
-                ))}
-            </div>
+            {renderContent()}
         </ContentCard>
     );
 };
@@ -87,6 +120,50 @@ export const ReportContent = ({ content }: { content: any }) => {
                         content={item.content}
                     />
                 ))}
+            </div>
+        );
+    }
+
+    // Handle survey data
+    if (content.survey_objective || content.target_audience || content.questions) {
+        return (
+            <div className="space-y-4">
+                <ContentSection
+                    title="Survey Objective"
+                    content={content.survey_objective}
+                />
+                <ContentSection
+                    title="Target Audience"
+                    content={content.target_audience}
+                />
+                {content.sample_size && (
+                    <ContentSection
+                        title="Sample Size"
+                        content={content.sample_size}
+                    />
+                )}
+                {content.sampling_method && (
+                    <ContentSection
+                        title="Sampling Method"
+                        content={content.sampling_method}
+                    />
+                )}
+                <ContentSection
+                    title="Questions"
+                    content={content.questions}
+                />
+                {content.response_options && content.response_options.length > 0 && (
+                    <ContentSection
+                        title="Response Options"
+                        content={content.response_options}
+                    />
+                )}
+                {content.analysis_plan && content.analysis_plan.length > 0 && (
+                    <ContentSection
+                        title="Analysis Plan"
+                        content={content.analysis_plan}
+                    />
+                )}
             </div>
         );
     }
@@ -244,7 +321,6 @@ export default function ConsultantPage() {
             {error && (
                 <Alert variant="destructive" className="mb-4">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
