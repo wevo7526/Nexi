@@ -202,33 +202,46 @@ def stream_case_solution():
                 solutions = agent.generate_solutions(case_text)
                 yield format_sse({
                     'type': 'stream',
-                    'content': f'Generated {len(solutions)} potential solutions:'
+                    'content': f'Generated {len(solutions)} potential solutions'
                 })
-                
-                # Display each solution
-                for i, solution in enumerate(solutions, 1):
-                    yield format_sse({
-                        'type': 'stream',
-                        'content': f'\nSolution {i}:\n{solution}'
-                    })
 
                 # Recommendation
                 yield format_sse({
                     'type': 'stream',
-                    'content': '\nFormulating final recommendation...'
+                    'content': 'Formulating final recommendation...'
                 })
                 recommendation = agent.formulate_recommendation(solutions)
-                
-                # Display final recommendation
-                yield format_sse({
-                    'type': 'stream',
-                    'content': f'\nFinal Recommendation:\n{recommendation["solution"]}'
-                })
-                
-                # Final complete message
+
+                # Final structured response
+                structured_response = {
+                    'type': 'analysis',
+                    'analysis': {
+                        'problemStatement': problem_statement,
+                        'keyFactors': key_factors,
+                        'constraints': constraints,
+                        'solutions': [
+                            {
+                                'description': solution.get('description', ''),
+                                'pros': solution.get('pros', []),
+                                'cons': solution.get('cons', []),
+                                'implementation': solution.get('implementation', ''),
+                                'timeline': solution.get('timeline', '')
+                            }
+                            for solution in solutions
+                        ],
+                        'recommendation': {
+                            'solution': recommendation.get('solution', ''),
+                            'rationale': recommendation.get('rationale', ''),
+                            'implementation': recommendation.get('implementation', ''),
+                            'timeline': recommendation.get('implementation_timeline', ''),
+                            'successMetrics': recommendation.get('success_metrics', [])
+                        }
+                    }
+                }
+
                 yield format_sse({
                     'type': 'complete',
-                    'content': recommendation['solution']
+                    'content': structured_response
                 })
 
             except Exception as e:
@@ -250,7 +263,7 @@ def stream_case_solution():
         )
 
     except Exception as e:
-        print(f"Error in stream_case_solution: {str(e)}")
+        print(f"Error in stream_case_solution endpoint: {str(e)}")
         return jsonify({
             'error': str(e),
             'success': False

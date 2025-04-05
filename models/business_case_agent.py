@@ -70,8 +70,10 @@ For each solution, provide:
 1. A detailed description of the solution
 2. Pros (advantages and benefits)
 3. Cons (disadvantages and risks)
+4. Implementation steps
+5. Timeline
 
-Format your response as a structured list of solutions, each with clear pros and cons.
+Format your response as a structured list of solutions, each with clear pros, cons, implementation, and timeline.
 """
         response = self.llm.invoke(prompt)
         # Parse the response into a structured format
@@ -89,12 +91,18 @@ Format your response as a structured list of solutions, each with clear pros and
                 current_solution = {
                     'description': '',
                     'pros': [],
-                    'cons': []
+                    'cons': [],
+                    'implementation': '',
+                    'timeline': ''
                 }
             elif line.startswith('Pros:'):
                 current_solution['pros'] = [p.strip() for p in line.replace('Pros:', '').split(',') if p.strip()]
             elif line.startswith('Cons:'):
                 current_solution['cons'] = [c.strip() for c in line.replace('Cons:', '').split(',') if c.strip()]
+            elif line.startswith('Implementation:'):
+                current_solution['implementation'] = line.replace('Implementation:', '').strip()
+            elif line.startswith('Timeline:'):
+                current_solution['timeline'] = line.replace('Timeline:', '').strip()
             elif current_solution:
                 current_solution['description'] += line + ' '
         
@@ -113,8 +121,9 @@ Solutions:
 Provide a comprehensive recommendation that includes:
 1. The recommended solution
 2. Rationale for the recommendation
-3. Implementation timeline
-4. Success metrics
+3. Implementation plan
+4. Timeline
+5. Success metrics
 
 Format your response in a clear, structured manner.
 """
@@ -124,8 +133,9 @@ Format your response in a clear, structured manner.
         recommendation = {
             'solution': '',
             'rationale': '',
-            'implementation_timeline': '',
-            'success_metrics': []
+            'implementation': '',
+            'timeline': '',
+            'successMetrics': []
         }
         
         current_section = None
@@ -138,12 +148,14 @@ Format your response in a clear, structured manner.
                 current_section = 'solution'
             elif line.startswith('Rationale:'):
                 current_section = 'rationale'
-            elif line.startswith('Implementation Timeline:'):
-                current_section = 'implementation_timeline'
+            elif line.startswith('Implementation Plan:'):
+                current_section = 'implementation'
+            elif line.startswith('Timeline:'):
+                current_section = 'timeline'
             elif line.startswith('Success Metrics:'):
-                current_section = 'success_metrics'
+                current_section = 'successMetrics'
             elif current_section:
-                if current_section == 'success_metrics':
+                if current_section == 'successMetrics':
                     recommendation[current_section].append(line)
                 else:
                     recommendation[current_section] += line + ' '
