@@ -1,4 +1,4 @@
-Wealth Management and Consulting services powered by Langchai agents (claude-3-5-sonnet).
+Marketing Research and Consulting services powered by Langchain agents (claude-3-5-sonnet).
 
 Backend is Langchain python.
 
