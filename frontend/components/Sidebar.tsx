@@ -4,29 +4,101 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-    ChatBubbleLeftRightIcon,
-    ChartBarIcon,
-    ChartBarSquareIcon,
-    CommandLineIcon,
-    DocumentTextIcon,
+    HomeIcon,
     FolderIcon,
-    LightBulbIcon
+    DocumentTextIcon,
+    ChartBarIcon,
+    CommandLineIcon,
+    LightBulbIcon,
+    BookOpenIcon,
+    DocumentDuplicateIcon,
+    ChartPieIcon,
+    UserGroupIcon,
+    Cog6ToothIcon,
+    DocumentCheckIcon,
+    ClipboardDocumentListIcon,
+    RocketLaunchIcon,
+    BuildingOfficeIcon,
+    MagnifyingGlassIcon,
+    PresentationChartLineIcon,
+    ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
     name: string;
     path: string;
     icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+    isProjectRoute?: boolean;
 }
 
-const navigation = [
+interface NavSection {
+    name: string;
+    items: NavItem[];
+}
+
+const navigation: NavSection[] = [
+    {
+        name: 'Overview',
+        items: [
+            {
+                name: 'Dashboard',
+                path: '/dashboard',
+                icon: HomeIcon
+            }
+        ]
+    },
+    {
+        name: 'Projects',
+        items: [
+            {
+                name: 'Active Projects',
+                path: '/projects/active',
+                icon: FolderIcon
+            },
+            {
+                name: 'Project Templates',
+                path: '/projects/templates',
+                icon: DocumentDuplicateIcon
+            },
+            {
+                name: 'Project Archive',
+                path: '/projects/archive',
+                icon: DocumentCheckIcon
+            }
+        ]
+    },
+    {
+        name: 'Workflows',
+        items: [
+            {
+                name: 'Discovery',
+                path: '/workflows/discovery',
+                icon: MagnifyingGlassIcon
+            },
+            {
+                name: 'Analysis',
+                path: '/workflows/analysis',
+                icon: ChartPieIcon
+            },
+            {
+                name: 'Solution Development',
+                path: '/workflows/solution',
+                icon: RocketLaunchIcon
+            },
+            {
+                name: 'Implementation',
+                path: '/workflows/implementation',
+                icon: ClipboardDocumentCheckIcon
+            }
+        ]
+    },
     {
         name: 'AI Tools',
         items: [
             {
-                name: 'Consultant',
-                path: '/consultant',
-                icon: ChatBubbleLeftRightIcon
+                name: 'Case Solver',
+                path: '/business-case',
+                icon: BuildingOfficeIcon
             },
             {
                 name: 'Market Research',
@@ -34,14 +106,9 @@ const navigation = [
                 icon: ChartBarIcon
             },
             {
-                name: 'Case Solver',
-                path: '/business-case',
-                icon: ChartBarSquareIcon
-            },
-            {
                 name: 'Research Assistant',
                 path: '/multi-agent',
-                icon: CommandLineIcon
+                icon: PresentationChartLineIcon
             }
         ]
     },
@@ -49,14 +116,19 @@ const navigation = [
         name: 'Resources',
         items: [
             {
-                name: 'Reports',
-                path: '/reports',
-                icon: DocumentTextIcon
+                name: 'Knowledge Base',
+                path: '/resources/knowledge',
+                icon: BookOpenIcon
             },
             {
-                name: 'Insights',
-                path: '/insights',
-                icon: LightBulbIcon
+                name: 'Templates',
+                path: '/resources/templates',
+                icon: DocumentDuplicateIcon
+            },
+            {
+                name: 'Reports',
+                path: '/resources/reports',
+                icon: DocumentTextIcon
             }
         ]
     }
@@ -64,6 +136,13 @@ const navigation = [
 
 export default function Sidebar() {
     const pathname = usePathname();
+    
+    // Extract project ID from pathname if we're in a project route
+    const projectId = pathname?.split('/')[2];
+    const isProjectRoute = pathname?.startsWith('/projects/') && projectId !== 'active' && projectId !== 'templates' && projectId !== 'archive';
+
+    // Get the current active project ID from the pathname
+    const currentProjectId = isProjectRoute ? projectId : null;
 
     return (
         <div className="sidebar">
@@ -84,20 +163,61 @@ export default function Sidebar() {
                     <div key={section.name} className="nav-section">
                         <h2 className="section-title">{section.name}</h2>
                         <div className="section-items">
-                            {section.items.map((item) => (
-                                <Link
-                                    key={item.path}
-                                    href={item.path}
-                                    className={`nav-item ${pathname === item.path ? 'active' : ''}`}
-                                >
-                                    <div className="nav-content">
-                                        <div className="icon-wrapper">
-                                            <item.icon className="nav-icon" />
+                            {section.items.map((item) => {
+                                // For project routes, we need to handle the navigation differently
+                                if (item.isProjectRoute) {
+                                    // If we're not in a project context, link to the active projects page
+                                    if (!currentProjectId) {
+                                        return (
+                                            <Link
+                                                key={item.path}
+                                                href="/projects/active"
+                                                className={`nav-item ${pathname === '/projects/active' ? 'active' : ''}`}
+                                            >
+                                                <div className="nav-content">
+                                                    <div className="icon-wrapper">
+                                                        <item.icon className="nav-icon" />
+                                                    </div>
+                                                    <span className="nav-name">{item.name}</span>
+                                                </div>
+                                            </Link>
+                                        );
+                                    }
+
+                                    // If we are in a project context, use the current project ID
+                                    const href = item.path.replace('[id]', currentProjectId);
+                                    return (
+                                        <Link
+                                            key={item.path}
+                                            href={href}
+                                            className={`nav-item ${pathname === href ? 'active' : ''}`}
+                                        >
+                                            <div className="nav-content">
+                                                <div className="icon-wrapper">
+                                                    <item.icon className="nav-icon" />
+                                                </div>
+                                                <span className="nav-name">{item.name}</span>
+                                            </div>
+                                        </Link>
+                                    );
+                                }
+
+                                // For non-project routes, use the path as is
+                                return (
+                                    <Link
+                                        key={item.path}
+                                        href={item.path}
+                                        className={`nav-item ${pathname === item.path ? 'active' : ''}`}
+                                    >
+                                        <div className="nav-content">
+                                            <div className="icon-wrapper">
+                                                <item.icon className="nav-icon" />
+                                            </div>
+                                            <span className="nav-name">{item.name}</span>
                                         </div>
-                                        <span className="nav-name">{item.name}</span>
-                                    </div>
-                                </Link>
-                            ))}
+                                    </Link>
+                                );
+                            })}
                         </div>
                     </div>
                 ))}
@@ -119,11 +239,11 @@ export default function Sidebar() {
                 }
 
                 .sidebar-header {
-                    padding: 1.75rem 2rem;
+                    padding: 1rem 1.5rem;
                     display: flex;
                     align-items: center;
                     border-bottom: 1px solid #f3f4f6;
-                    height: 80px;
+                    height: 64px;
                     background: #ffffff;
                 }
 
@@ -134,21 +254,21 @@ export default function Sidebar() {
 
                 .sidebar-nav {
                     flex: 1;
-                    padding: 2.5rem 0;
+                    padding: 1rem 0;
                     overflow-y: auto;
                     display: flex;
                     flex-direction: column;
-                    gap: 2.5rem;
+                    gap: 1.5rem;
                 }
 
                 .nav-section {
                     display: flex;
                     flex-direction: column;
-                    gap: 1rem;
+                    gap: 0.5rem;
                 }
 
                 .section-title {
-                    padding: 0 2rem;
+                    padding: 0 1.5rem;
                     font-size: 0.75rem;
                     font-weight: 600;
                     text-transform: uppercase;
@@ -159,13 +279,13 @@ export default function Sidebar() {
                 .section-items {
                     display: flex;
                     flex-direction: column;
-                    gap: 0.5rem;
-                    padding: 0 2rem;
+                    gap: 0.25rem;
+                    padding: 0 1.5rem;
                 }
 
                 .nav-item {
                     display: block;
-                    padding: 0.875rem 0;
+                    padding: 0.5rem 0;
                     color: #4b5563;
                     text-decoration: none;
                     transition: all 0.2s;
@@ -187,7 +307,7 @@ export default function Sidebar() {
                 .nav-item.active::before {
                     content: '';
                     position: absolute;
-                    left: -2rem;
+                    left: -1.5rem;
                     top: 0;
                     height: 100%;
                     width: 3px;
@@ -198,19 +318,19 @@ export default function Sidebar() {
                 .nav-content {
                     display: flex;
                     align-items: center;
-                    gap: 1.75rem;
-                    height: 32px;
+                    gap: 1rem;
+                    height: 28px;
                 }
 
                 .icon-wrapper {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    width: 32px;
-                    height: 32px;
+                    width: 28px;
+                    height: 28px;
                     flex-shrink: 0;
                     background: #f9fafb;
-                    border-radius: 8px;
+                    border-radius: 6px;
                     transition: all 0.2s;
                 }
 
@@ -223,14 +343,14 @@ export default function Sidebar() {
                 }
 
                 .nav-icon {
-                    width: 18px;
-                    height: 18px;
+                    width: 16px;
+                    height: 16px;
                     color: currentColor;
                 }
 
                 .nav-name {
                     font-weight: 500;
-                    font-size: 0.9375rem;
+                    font-size: 0.875rem;
                     line-height: 1.25rem;
                 }
 
