@@ -6,7 +6,8 @@ import {
     UserGroupIcon,
     DocumentTextIcon,
     LightBulbIcon,
-    ChartBarIcon
+    ChartBarIcon,
+    ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
 interface DiscoveryStep {
@@ -17,8 +18,13 @@ interface DiscoveryStep {
     aiAssistance: boolean;
 }
 
+interface AgentResponse {
+    role: string;
+    content: string;
+}
+
 export default function DiscoveryWorkflow() {
-    const [steps] = useState<DiscoveryStep[]>([
+    const [steps, setSteps] = useState<DiscoveryStep[]>([
         {
             id: '1',
             title: 'Client Assessment',
@@ -56,6 +62,65 @@ export default function DiscoveryWorkflow() {
         }
     ]);
 
+    const [isAgentActive, setIsAgentActive] = useState(false);
+    const [userInput, setUserInput] = useState('');
+    const [agentResponses, setAgentResponses] = useState<AgentResponse[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [currentStepIndex, setCurrentStepIndex] = useState(0);
+
+    const handleAgentResponse = async () => {
+        if (!userInput.trim()) return;
+
+        setIsLoading(true);
+        try {
+            const response = await fetch('/api/agent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `You are a project discovery consultant. Help the user with their project discovery process. Current step: ${steps[currentStepIndex].title}. Project details so far: ${JSON.stringify(agentResponses)}`
+                        },
+                        ...agentResponses,
+                        {
+                            role: 'user',
+                            content: userInput
+                        }
+                    ]
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to get agent response');
+            
+            const data = await response.json();
+            setAgentResponses(prev => [...prev, 
+                { role: 'user', content: userInput },
+                { role: 'assistant', content: data.content }
+            ]);
+            setUserInput('');
+        } catch (error) {
+            console.error('Error getting agent response:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleNextStep = () => {
+        if (currentStepIndex < steps.length - 1) {
+            setCurrentStepIndex(prev => prev + 1);
+            setSteps(prev => prev.map((step, index) => 
+                index === currentStepIndex + 1 
+                    ? { ...step, status: 'in_progress' }
+                    : index === currentStepIndex
+                        ? { ...step, status: 'completed' }
+                        : step
+            ));
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -64,35 +129,80 @@ export default function DiscoveryWorkflow() {
                     <h1 className="text-2xl font-semibold text-gray-900">Discovery Phase</h1>
                     <p className="text-sm text-gray-500">Initial project assessment and planning</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                    Start AI Assistant
+                <button 
+                    onClick={() => setIsAgentActive(!isAgentActive)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                    {isAgentActive ? 'Hide AI Assistant' : 'Show AI Assistant'}
                 </button>
             </div>
 
             {/* AI Assistant Panel */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-blue-100 rounded-full">
-                        <MagnifyingGlassIcon className="h-6 w-6 text-blue-600" />
+            {isAgentActive && (
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <div className="flex items-center space-x-4">
+                        <div className="p-3 bg-blue-100 rounded-full">
+                            <MagnifyingGlassIcon className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-medium text-gray-900">AI Discovery Assistant</h2>
+                            <p className="text-sm text-gray-500">Let AI help guide you through the discovery process</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="text-lg font-medium text-gray-900">AI Discovery Assistant</h2>
-                        <p className="text-sm text-gray-500">Let AI help guide you through the discovery process</p>
+
+                    {/* Chat Messages */}
+                    <div className="mt-4 space-y-4 h-96 overflow-y-auto">
+                        {agentResponses.map((response, index) => (
+                            <div
+                                key={index}
+                                className={`flex ${
+                                    response.role === 'user' ? 'justify-end' : 'justify-start'
+                                }`}
+                            >
+                                <div
+                                    className={`max-w-[80%] rounded-lg p-3 ${
+                                        response.role === 'user'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-100 text-gray-900'
+                                    }`}
+                                >
+                                    {response.content}
+                                </div>
+                            </div>
+                        ))}
+                        {isLoading && (
+                            <div className="flex justify-start">
+                                <div className="bg-gray-100 rounded-lg p-3">
+                                    <ArrowPathIcon className="w-5 h-5 animate-spin text-gray-500" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Input Area */}
+                    <div className="mt-4 flex space-x-4">
+                        <textarea
+                            value={userInput}
+                            onChange={(e) => setUserInput(e.target.value)}
+                            className="flex-1 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            rows={3}
+                            placeholder="Describe your project or ask for guidance..."
+                            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleAgentResponse()}
+                        />
+                        <button
+                            onClick={handleAgentResponse}
+                            disabled={isLoading || !userInput.trim()}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? (
+                                <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                            ) : (
+                                'Get AI Guidance'
+                            )}
+                        </button>
                     </div>
                 </div>
-                <div className="mt-4">
-                    <textarea
-                        className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows={4}
-                        placeholder="Describe your project or ask for guidance..."
-                    />
-                </div>
-                <div className="mt-4 flex justify-end">
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                        Get AI Guidance
-                    </button>
-                </div>
-            </div>
+            )}
 
             {/* Workflow Steps */}
             <div className="bg-white rounded-lg shadow-sm">
@@ -100,7 +210,7 @@ export default function DiscoveryWorkflow() {
                     <h2 className="text-lg font-medium text-gray-900">Discovery Steps</h2>
                 </div>
                 <div className="divide-y divide-gray-200">
-                    {steps.map((step) => (
+                    {steps.map((step, index) => (
                         <div key={step.id} className="p-6">
                             <div className="flex items-start justify-between">
                                 <div className="flex items-start space-x-4">
@@ -137,7 +247,10 @@ export default function DiscoveryWorkflow() {
                             </div>
                             {step.status === 'in_progress' && (
                                 <div className="mt-4">
-                                    <button className="text-sm text-blue-600 hover:text-blue-700">
+                                    <button 
+                                        onClick={() => setIsAgentActive(true)}
+                                        className="text-sm text-blue-600 hover:text-blue-700"
+                                    >
                                         Start AI-Guided Assessment →
                                     </button>
                                 </div>
@@ -176,6 +289,17 @@ export default function DiscoveryWorkflow() {
                         <p className="text-sm text-gray-500">Checklist for project scope definition</p>
                     </div>
                 </div>
+            </div>
+
+            {/* Navigation */}
+            <div className="flex justify-end">
+                <button
+                    onClick={handleNextStep}
+                    disabled={currentStepIndex === steps.length - 1}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Next Step →
+                </button>
             </div>
         </div>
     );

@@ -79,40 +79,90 @@ function ContentCard({ children, className }: { children: React.ReactNode; class
 
 function InteractiveCaseAnalysis({ analysis, activeTab }: InteractiveCaseAnalysisProps) {
     const [selectedSolution, setSelectedSolution] = useState<number | null>(null);
+    const [activeSection, setActiveSection] = useState('problem');
 
     return (
         <div className="space-y-8">
+            {/* Navigation Tabs */}
+            <div className="flex space-x-4 overflow-x-auto pb-2">
+                {['problem', 'factors', 'solutions', 'constraints', 'recommendation'].map((section) => (
+                    <button
+                        key={section}
+                        onClick={() => setActiveSection(section)}
+                        className={cn(
+                            "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
+                            activeSection === section
+                                ? "bg-primary text-white"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        )}
+                    >
+                        {section.charAt(0).toUpperCase() + section.slice(1)}
+                    </button>
+                ))}
+            </div>
+
             {/* Problem Statement */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
+                    activeSection !== 'problem' && "hidden"
+                )}
+            >
                 <div className="flex items-center gap-3 mb-4">
                     <div className="p-2 bg-primary/10 rounded-lg">
                         <Search className="w-5 h-5 text-primary" />
                     </div>
                     <h2 className="text-lg font-semibold">Problem Statement</h2>
                 </div>
-                <p className="text-gray-600 leading-relaxed max-w-[1200px]">{analysis.problemStatement}</p>
-            </div>
+                <div className="prose prose-sm max-w-none">
+                    <p className="text-gray-600 leading-relaxed">{analysis.problemStatement}</p>
+                </div>
+            </motion.div>
 
             {/* Key Factors */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
-                <div className="flex items-center gap-3 mb-4">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
+                    activeSection !== 'factors' && "hidden"
+                )}
+            >
+                <div className="flex items-center gap-3 mb-6">
                     <div className="p-2 bg-primary/10 rounded-lg">
                         <CheckCircle className="w-5 h-5 text-primary" />
                     </div>
                     <h2 className="text-lg font-semibold">Key Factors</h2>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {analysis.keyFactors.map((factor, index) => (
-                        <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                            <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2"></div>
+                        <motion.div
+                            key={index}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.1 }}
+                            className="group flex items-start gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-primary/50 hover:bg-gray-100 transition-all"
+                        >
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <span className="text-sm font-medium text-primary">{index + 1}</span>
+                            </div>
                             <span className="text-gray-600 text-sm">{factor}</span>
-                        </div>
+                        </motion.div>
                     ))}
                 </div>
-            </div>
+            </motion.div>
 
             {/* Solutions */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
+                    activeSection !== 'solutions' && "hidden"
+                )}
+            >
                 <div className="flex items-center gap-3 mb-6">
                     <div className="p-2 bg-primary/10 rounded-lg">
                         <CheckCircle className="w-5 h-5 text-primary" />
@@ -122,13 +172,16 @@ function InteractiveCaseAnalysis({ analysis, activeTab }: InteractiveCaseAnalysi
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {analysis.solutions.map((solution, idx) => (
-                        <div
+                        <motion.div
                             key={idx}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: idx * 0.1 }}
                             className={cn(
                                 "group relative rounded-lg border transition-all duration-200",
                                 selectedSolution === idx
-                                    ? "border-primary bg-primary/5"
-                                    : "border-gray-200 hover:border-primary/50 hover:bg-gray-50"
+                                    ? "border-primary bg-primary/5 shadow-md"
+                                    : "border-gray-200 hover:border-primary/50 hover:bg-gray-50 hover:shadow-sm"
                             )}
                         >
                             <div className="p-4">
@@ -146,9 +199,13 @@ function InteractiveCaseAnalysis({ analysis, activeTab }: InteractiveCaseAnalysi
                                     </div>
                                     <button
                                         onClick={() => setSelectedSolution(selectedSolution === idx ? null : idx)}
-                                        className="text-sm text-primary hover:text-primary/80"
+                                        className="text-sm text-primary hover:text-primary/80 flex items-center gap-1"
                                     >
                                         {selectedSolution === idx ? 'Hide Details' : 'Show Details'}
+                                        <ChevronRight className={cn(
+                                            "w-4 h-4 transition-transform",
+                                            selectedSolution === idx && "rotate-90"
+                                        )} />
                                     </button>
                                 </div>
                                 
@@ -168,58 +225,67 @@ function InteractiveCaseAnalysis({ analysis, activeTab }: InteractiveCaseAnalysi
                                 </div>
                             </div>
 
-                            {selectedSolution === idx && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "auto" }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="border-t border-gray-100"
-                                >
-                                    <div className="p-4 space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-green-50 rounded-lg p-3 border border-green-100">
-                                                <h4 className="text-sm font-medium text-green-600 mb-2">Pros</h4>
-                                                <ul className="space-y-1.5">
-                                                    {solution.pros.map((pro, idx) => (
-                                                        <li key={idx} className="flex items-start gap-2 text-sm">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div>
-                                                            <span className="text-gray-600">{pro}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
+                            <AnimatePresence>
+                                {selectedSolution === idx && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="border-t border-gray-100"
+                                    >
+                                        <div className="p-4 space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-green-50 rounded-lg p-3 border border-green-100">
+                                                    <h4 className="text-sm font-medium text-green-600 mb-2">Pros</h4>
+                                                    <ul className="space-y-1.5">
+                                                        {solution.pros.map((pro, idx) => (
+                                                            <li key={idx} className="flex items-start gap-2 text-sm">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div>
+                                                                <span className="text-gray-600">{pro}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                                <div className="bg-red-50 rounded-lg p-3 border border-red-100">
+                                                    <h4 className="text-sm font-medium text-red-600 mb-2">Cons</h4>
+                                                    <ul className="space-y-1.5">
+                                                        {solution.cons.map((con, idx) => (
+                                                            <li key={idx} className="flex items-start gap-2 text-sm">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5"></div>
+                                                                <span className="text-gray-600">{con}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
                                             </div>
-                                            <div className="bg-red-50 rounded-lg p-3 border border-red-100">
-                                                <h4 className="text-sm font-medium text-red-600 mb-2">Cons</h4>
-                                                <ul className="space-y-1.5">
-                                                    {solution.cons.map((con, idx) => (
-                                                        <li key={idx} className="flex items-start gap-2 text-sm">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5"></div>
-                                                            <span className="text-gray-600">{con}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-gray-50 rounded-lg p-3">
+                                                    <h4 className="text-sm font-medium text-gray-700 mb-1">Implementation</h4>
+                                                    <p className="text-sm text-gray-600">{solution.implementation}</p>
+                                                </div>
+                                                <div className="bg-gray-50 rounded-lg p-3">
+                                                    <h4 className="text-sm font-medium text-gray-700 mb-1">Timeline</h4>
+                                                    <p className="text-sm text-gray-600">{solution.timeline}</p>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-gray-50 rounded-lg p-3">
-                                                <h4 className="text-sm font-medium text-gray-700 mb-1">Implementation</h4>
-                                                <p className="text-sm text-gray-600">{solution.implementation}</p>
-                                            </div>
-                                            <div className="bg-gray-50 rounded-lg p-3">
-                                                <h4 className="text-sm font-medium text-gray-700 mb-1">Timeline</h4>
-                                                <p className="text-sm text-gray-600">{solution.timeline}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </motion.div>
                     ))}
                 </div>
-            </div>
+            </motion.div>
 
             {/* Constraints */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
+                    activeSection !== 'constraints' && "hidden"
+                )}
+            >
                 <div className="flex items-center gap-3 mb-6">
                     <div className="p-2 bg-red-50 rounded-lg">
                         <AlertCircle className="w-5 h-5 text-red-500" />
@@ -229,8 +295,11 @@ function InteractiveCaseAnalysis({ analysis, activeTab }: InteractiveCaseAnalysi
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {analysis.constraints.map((constraint, index) => (
-                        <div 
+                        <motion.div
                             key={index}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.1 }}
                             className="group flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100 hover:border-red-200 transition-colors"
                         >
                             <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
@@ -239,46 +308,57 @@ function InteractiveCaseAnalysis({ analysis, activeTab }: InteractiveCaseAnalysi
                             <div className="flex-1">
                                 <p className="text-sm text-gray-600">{constraint}</p>
                             </div>
-                        </div>
+                        </motion.div>
                     ))}
                 </div>
-            </div>
+            </motion.div>
 
             {/* Recommendation */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
-                <div className="flex items-center gap-3 mb-4">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
+                    activeSection !== 'recommendation' && "hidden"
+                )}
+            >
+                <div className="flex items-center gap-3 mb-6">
                     <div className="p-2 bg-primary/10 rounded-lg">
                         <CheckCircle className="w-5 h-5 text-primary" />
                     </div>
                     <h2 className="text-lg font-semibold">Final Recommendation</h2>
                 </div>
-                <div className="space-y-4">
-                    <div className="p-4 bg-primary/5 rounded-lg">
-                        <p className="text-gray-600 max-w-[1200px]">{analysis.recommendation.solution}</p>
+
+                <div className="space-y-6">
+                    <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
+                        <h3 className="text-sm font-medium text-primary mb-2">Recommended Solution</h3>
+                        <p className="text-gray-600">{analysis.recommendation.solution}</p>
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">Implementation</h4>
-                            <p className="text-sm text-gray-600">{analysis.recommendation.implementation}</p>
+                        <div className="bg-gray-50 rounded-lg p-4">
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">Implementation Plan</h3>
+                            <p className="text-gray-600">{analysis.recommendation.implementation}</p>
                         </div>
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">Timeline</h4>
-                            <p className="text-sm text-gray-600">{analysis.recommendation.timeline}</p>
+                        <div className="bg-gray-50 rounded-lg p-4">
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">Timeline</h3>
+                            <p className="text-gray-600">{analysis.recommendation.timeline}</p>
                         </div>
                     </div>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Success Metrics</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                        <h3 className="text-sm font-medium text-green-600 mb-2">Success Metrics</h3>
+                        <ul className="space-y-2">
                             {analysis.recommendation.successMetrics.map((metric, index) => (
-                                <div key={index} className="flex items-center gap-2 text-sm">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                                    <span className="text-gray-600">{metric}</span>
-                                </div>
+                                <li key={index} className="flex items-start gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div>
+                                    <span className="text-sm text-gray-600">{metric}</span>
+                                </li>
                             ))}
-                        </div>
+                        </ul>
                     </div>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 }
