@@ -7,9 +7,14 @@ from datetime import datetime
 import re
 import json
 from langchain.schema import SystemMessage, HumanMessage
-from typing import Dict
+from typing import Dict, List, Any, Generator
 import time
 from anthropic._exceptions import OverloadedError, RateLimitError, APIError
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
+from langchain_core.messages import AIMessage
+from dotenv import load_dotenv
+import os
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -20,30 +25,34 @@ def retry_with_backoff(func, max_retries=3, base_delay=2, max_delay=10):
     for attempt in range(max_retries):
         try:
             return func()
-        except (OverloadedError, RateLimitError) as e:
-            last_error = e
-            if attempt < max_retries - 1:
-                delay = min(base_delay * (2 ** attempt), max_delay)
-                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
-                time.sleep(delay)
-            continue
-        except APIError as e:
-            last_error = e
-            if attempt < max_retries - 1:
-                delay = min(base_delay * (2 ** attempt), max_delay)
-                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
-                time.sleep(delay)
-            continue
         except Exception as e:
-            raise e
-
+            last_error = e
+            # Handle Anthropic API errors
+            if hasattr(e, 'response'):
+                try:
+                    response = e.response
+                    if response.status_code == 429:  # Rate limit
+                        if attempt < max_retries - 1:
+                            delay = min(base_delay * (2 ** attempt), max_delay)
+                            logger.warning(f"Attempt {attempt + 1} failed with rate limit error. Retrying in {delay} seconds...")
+                            time.sleep(delay)
+                            continue
+                        else:
+                            raise Exception("Rate limit exceeded. Please try again in a few moments.")
+                    else:
+                        error_data = response.json()
+                        error_message = error_data.get('error', {}).get('message', str(e))
+                        logger.error(f"API Error: {error_message}")
+                        raise Exception(error_message)
+                except Exception as parse_error:
+                    logger.error(f"Error parsing API response: {str(parse_error)}")
+                    raise Exception(str(e))
+            else:
+                logger.error(f"Unexpected error: {str(e)}")
+                raise
+                
     if last_error:
-        if isinstance(last_error, OverloadedError):
-            raise Exception("The AI service is currently experiencing high demand. Please try again in a few moments.")
-        elif isinstance(last_error, RateLimitError):
-            raise Exception("Too many requests. Please wait a moment before trying again.")
-        else:
-            raise Exception(f"An error occurred: {str(last_error)}")
+        raise last_error
 
 class PrimaryResearchConsultant:
     def __init__(self):

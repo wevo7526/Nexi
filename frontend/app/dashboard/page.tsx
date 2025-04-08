@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
     ChartBarIcon,
     DocumentTextIcon,
@@ -31,6 +32,7 @@ interface AnalyticsData {
 
 export default function Dashboard() {
     const router = useRouter();
+    const supabase = createClientComponentClient();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [analytics, setAnalytics] = useState<AnalyticsData>({
@@ -45,26 +47,59 @@ export default function Dashboard() {
     });
 
     useEffect(() => {
-        const fetchData = async () => {
-            setIsLoading(true);
-            setError(null);
+        const checkAuth = async () => {
+            const { data: { session }, error } = await supabase.auth.getSession();
             
-            try {
-                const response = await fetch('/api/analytics');
-                if (!response.ok) throw new Error('Failed to fetch analytics data');
-                
-                const data = await response.json();
-                setAnalytics(data);
-            } catch (error) {
-                console.error('Error fetching analytics:', error);
-                setError(error instanceof Error ? error.message : 'Failed to load analytics data');
-            } finally {
-                setIsLoading(false);
+            if (error || !session) {
+                router.push('/auth');
+                return;
             }
+            
+            fetchData();
         };
 
-        fetchData();
-    }, []);
+        checkAuth();
+    }, [router]);
+
+    const fetchData = async () => {
+        setIsLoading(true);
+        setError(null);
+        
+        try {
+            const response = await fetch('/api/analytics', {
+                credentials: 'include',
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                if (response.status === 401) {
+                    router.push('/auth');
+                    return;
+                }
+                throw new Error(errorData.error || 'Failed to fetch analytics data');
+            }
+            
+            const data = await response.json();
+            setAnalytics({
+                totalRevenue: data.total_revenue || 0,
+                revenueGrowth: data.revenue_growth || 0,
+                activeClients: data.active_clients || 0,
+                clientGrowth: data.client_growth || 0,
+                documentsGenerated: data.documents_generated || 0,
+                documentGrowth: data.document_growth || 0,
+                averageCompletionTime: data.average_completion_time || 0,
+                timeGrowth: data.time_growth || 0
+            });
+        } catch (error) {
+            console.error('Error fetching analytics:', error);
+            setError(error instanceof Error ? error.message : 'Failed to load analytics data');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {

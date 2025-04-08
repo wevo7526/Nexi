@@ -22,30 +22,42 @@ def retry_with_backoff(func, max_retries=3, base_delay=2, max_delay=10):
     for attempt in range(max_retries):
         try:
             return func()
-        except (OverloadedError, RateLimitError) as e:
-            last_error = e
-            if attempt < max_retries - 1:
-                delay = min(base_delay * (2 ** attempt), max_delay)
-                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
-                time.sleep(delay)
-            continue
-        except APIError as e:
-            last_error = e
-            if attempt < max_retries - 1:
-                delay = min(base_delay * (2 ** attempt), max_delay)
-                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
-                time.sleep(delay)
-            continue
         except Exception as e:
-            raise e
-
+            last_error = e
+            # Handle Anthropic API errors
+            if hasattr(e, 'response'):
+                try:
+                    response = e.response
+                    if response.status_code == 529:
+                        if attempt < max_retries - 1:
+                            delay = min(base_delay * (2 ** attempt), max_delay)
+                            logger.warning(f"Attempt {attempt + 1} failed with overloaded error. Retrying in {delay} seconds...")
+                            time.sleep(delay)
+                            continue
+                        else:
+                            raise Exception("The AI service is currently experiencing high demand. Please try again in a few moments.")
+                    elif response.status_code == 429:
+                        if attempt < max_retries - 1:
+                            delay = min(base_delay * (2 ** attempt), max_delay)
+                            logger.warning(f"Attempt {attempt + 1} failed with rate limit error. Retrying in {delay} seconds...")
+                            time.sleep(delay)
+                            continue
+                        else:
+                            raise Exception("Rate limit exceeded. Please try again in a few moments.")
+                    else:
+                        error_data = response.json()
+                        error_message = error_data.get('error', {}).get('message', str(e))
+                        logger.error(f"API Error: {error_message}")
+                        raise Exception(error_message)
+                except Exception as parse_error:
+                    logger.error(f"Error parsing API response: {str(parse_error)}")
+                    raise Exception(str(e))
+            else:
+                logger.error(f"Unexpected error: {str(e)}")
+                raise
+                
     if last_error:
-        if isinstance(last_error, OverloadedError):
-            raise Exception("The AI service is currently experiencing high demand. Please try again in a few moments.")
-        elif isinstance(last_error, RateLimitError):
-            raise Exception("Too many requests. Please wait a moment before trying again.")
-        else:
-            raise Exception(f"An error occurred: {str(last_error)}")
+        raise last_error
 
 class StreamingCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming intermediate steps."""
@@ -136,15 +148,21 @@ class MarketResearchAgent:
     def __init__(self):
         print("\n🔄 Initializing Market Research Agent...")
         
-        # Initialize the language model
-        self.llm = ChatAnthropic(
-            model="claude-3-5-sonnet-20240620",
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-            temperature=0.7,
-            streaming=True,
-            max_tokens=4000
-        )
-        print("✅ LLM initialized")
+        # Initialize the language model with better error handling
+        try:
+            self.llm = ChatAnthropic(
+                model="claude-3-5-sonnet-20240620",
+                anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+                temperature=0.7,
+                streaming=True,
+                max_tokens=4000,
+                timeout=60,
+                max_retries=3
+            )
+            print("✅ LLM initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM: {str(e)}")
+            raise
         
         # Initialize SerpAPI tool
         self.search = SerpAPIWrapper(
@@ -266,12 +284,6 @@ Question: {input}
     def research_stream(self, query: str) -> Generator[Dict[str, Any], None, None]:
         """
         Stream the research process and results.
-        
-        Args:
-            query (str): The research question or topic to analyze
-            
-        Yields:
-            Dict[str, Any]: Stream of thoughts, actions, and the final analysis
         """
         try:
             print(f"\n📝 Starting comprehensive research for query: {query}")
@@ -281,20 +293,33 @@ Question: {input}
                 agent=self.agent,
                 tools=self.tools,
                 handle_parsing_errors=True,
-                max_iterations=8,  # Increased for comprehensive research
-                max_execution_time=600,  # Increased for thorough analysis
+                max_iterations=8,
+                max_execution_time=600,
                 callbacks=[handler],
                 early_stopping_method="force",
                 verbose=True
             )
             
             try:
-                # Run the agent with retry logic
+                # Run the agent with enhanced retry logic
                 def _execute_research():
-                    return agent_executor.invoke({
-                        "input": query,
-                        "chat_history": self.chat_history[-3:]
-                    })
+                    try:
+                        return agent_executor.invoke({
+                            "input": query,
+                            "chat_history": self.chat_history[-3:]
+                        })
+                    except Exception as e:
+                        if hasattr(e, 'response'):
+                            response = e.response
+                            if response.status_code == 529:
+                                raise Exception("The AI service is currently experiencing high demand. Please try again in a few moments.")
+                            elif response.status_code == 429:
+                                raise Exception("Rate limit exceeded. Please try again in a few moments.")
+                            else:
+                                error_data = response.json()
+                                error_message = error_data.get('error', {}).get('message', str(e))
+                                raise Exception(error_message)
+                        raise
                 
                 response = retry_with_backoff(_execute_research)
                 
@@ -321,7 +346,7 @@ Question: {input}
                     }
                 
             except Exception as e:
-                error_msg = f"Error during research execution: {str(e)}"
+                error_msg = str(e)
                 print(f"\n❌ {error_msg}")
                 yield {
                     "status": "error",
