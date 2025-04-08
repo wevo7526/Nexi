@@ -8,9 +8,42 @@ import re
 import json
 from langchain.schema import SystemMessage, HumanMessage
 from typing import Dict
+import time
+from anthropic._exceptions import OverloadedError, RateLimitError, APIError
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+def retry_with_backoff(func, max_retries=3, base_delay=2, max_delay=10):
+    """Execute a function with exponential backoff retry logic."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except (OverloadedError, RateLimitError) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
+                time.sleep(delay)
+            continue
+        except APIError as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
+                time.sleep(delay)
+            continue
+        except Exception as e:
+            raise e
+
+    if last_error:
+        if isinstance(last_error, OverloadedError):
+            raise Exception("The AI service is currently experiencing high demand. Please try again in a few moments.")
+        elif isinstance(last_error, RateLimitError):
+            raise Exception("Too many requests. Please wait a moment before trying again.")
+        else:
+            raise Exception(f"An error occurred: {str(last_error)}")
 
 class PrimaryResearchConsultant:
     def __init__(self):
@@ -278,179 +311,52 @@ class PrimaryResearchConsultant:
             return {"error": str(e)}
 
     def _get_research_design(self, query):
-        """Generate research design and methodology."""
-        system_message = """You are an expert in marketing research design and methodology.
-        Your role is to design comprehensive research plans. You MUST format your response with the following sections:
-
-        Research Objectives:
-        - List 3-5 key research objectives with specific, measurable outcomes
-        - Include detailed research questions that address each objective
-        - Define specific success metrics with target values
-        - Explain how each objective aligns with business goals
-
-        Methodology:
-        - Specify detailed research approach with rationale
-        - Detail data collection methods with specific tools and techniques
-        - Outline analysis techniques with statistical methods
-        - Include sampling strategy and justification
-        - Describe data quality assurance measures
-
-        Sample Design:
-        - Define target audience with specific demographics and psychographics
-        - Specify sample size with statistical justification
-        - Detail recruitment criteria and screening process
-        - Include sampling frame and selection method
-        - Address potential sampling biases and mitigation strategies
-
-        Timeline:
-        - List major project phases with specific dates
-        - Include key milestones and deliverables
-        - Specify duration estimates with buffer time
-        - Detail resource allocation per phase
-        - Include contingency planning
-
-        Budget Considerations:
-        - List major cost components with detailed breakdowns
-        - Include resource requirements with specific roles
-        - Note potential constraints and risk factors
-        - Provide cost optimization strategies
-        - Include ROI projections
-
-        IMPORTANT: You MUST use these exact section headers, followed by detailed bullet points. Do not add any other sections or modify the headers."""
+        """Get research design with retry logic."""
+        def _call():
+            messages = [
+                SystemMessage(content=self.research_designer_prompt),
+                HumanMessage(content=query)
+            ]
+            response = self.research_designer.invoke(messages)
+            return self._parse_research_design_response(response.content)
         
-        response = self.research_designer.invoke([
-            ("system", system_message),
-            ("human", f"Design research plan for: {query}")
-        ])
-        return self._parse_research_design_response(response.content)
+        return retry_with_backoff(_call)
 
     def _get_focus_group_guide(self, research_plan: str) -> str:
-        """Get focus group discussion guide"""
-        try:
-            # If research_plan is a dictionary, extract relevant information
-            if isinstance(research_plan, dict):
-                research_plan_text = f"""
-                Research Objectives: {', '.join(research_plan.get('research_objectives', []))}
-                Methodology: {', '.join(research_plan.get('methodology', []))}
-                Sample Design: {', '.join(research_plan.get('sample_design', []))}
-                """
-            else:
-                research_plan_text = str(research_plan)
-
-            response = self.focus_group_facilitator.invoke([
+        """Get focus group guide with retry logic."""
+        def _call():
+            messages = [
                 SystemMessage(content=self.focus_group_prompt),
-                HumanMessage(content=f"Create a focus group discussion guide based on this research plan:\n\n{research_plan_text}")
-            ])
-            return response.content
-        except Exception as e:
-            logger.error(f"Error generating focus group guide: {str(e)}")
-            return "Error generating focus group guide. Please try again."
+                HumanMessage(content=research_plan)
+            ]
+            response = self.focus_group_facilitator.invoke(messages)
+            return self._parse_focus_group_response(response.content)
+        
+        return retry_with_backoff(_call)
 
     def _get_survey_design(self, query):
-        """Generate survey design and questions."""
-        system_message = """You are a survey design expert specializing in marketing research.
-        Your role is to design comprehensive surveys. You MUST format your response with the following sections:
-
-        Survey Questions:
-        - Main questions with specific wording
-        - Response options with detailed instructions
-        - Skip patterns with logic flow
-        - Validation rules with error messages
-        - Question dependencies and relationships
-        - Question randomization rules
-        - Question grouping and order
-        - Question testing procedures
-
-        Response Scales:
-        - Scale types with specific applications
-        - Rating options with detailed descriptions
-        - Labeling with exact wording
-        - Formatting with visual examples
-        - Scale reliability measures
-        - Scale validation procedures
-        - Scale testing requirements
-        - Scale adaptation guidelines
-
-        Survey Flow:
-        - Question order with specific logic
-        - Branching logic with detailed paths
-        - Progress indicators with specific points
-        - Mobile optimization requirements
-        - Screen size considerations
-        - Loading time optimization
-        - Navigation controls
-        - Save and resume functionality
-
-        Quality Controls:
-        - Attention checks with specific questions
-        - Consistency measures with validation rules
-        - Speed checks with time thresholds
-        - Data validation with specific rules
-        - Response quality indicators
-        - Survey completion criteria
-        - Data cleaning procedures
-        - Quality reporting metrics
-
-        Use clear section headers exactly as shown above, followed by detailed bullet points. Each point should be specific and actionable."""
+        """Get survey design with retry logic."""
+        def _call():
+            messages = [
+                SystemMessage(content=self.survey_designer_prompt),
+                HumanMessage(content=query)
+            ]
+            response = self.survey_designer.invoke(messages)
+            return self._parse_survey_response(response.content)
         
-        response = self.survey_designer.invoke([
-            ("system", system_message),
-            ("human", f"Design survey for: {query}")
-        ])
-        return self._parse_survey_response(response.content)
+        return retry_with_backoff(_call)
 
     def _get_analysis_plan(self, query):
-        """Generate data analysis plan."""
-        system_message = """You are a marketing research data analysis specialist.
-        Your role is to design analysis plans. You MUST format your response with the following sections:
-
-        Analysis Methods:
-        - Statistical techniques with specific applications
-        - Data cleaning steps with detailed procedures
-        - Variable coding with specific rules
-        - Cross-tabulations with key relationships
-        - Advanced statistical methods
-        - Data transformation procedures
-        - Missing data handling
-        - Outlier detection and treatment
-
-        Key Metrics:
-        - Performance indicators with specific calculations
-        - Success criteria with target values
-        - Benchmark comparisons with data sources
-        - Trend analysis with time periods
-        - Statistical significance levels
-        - Effect size calculations
-        - Confidence intervals
-        - Margin of error calculations
-
-        Visualization Plan:
-        - Chart types with specific use cases
-        - Data presentation with formatting rules
-        - Interactive elements with functionality
-        - Reporting format with templates
-        - Color schemes and accessibility
-        - Data hierarchy visualization
-        - Dynamic filtering options
-        - Export capabilities
-
-        Reporting Template:
-        - Executive summary with key metrics
-        - Key findings with supporting data
-        - Recommendations with implementation steps
-        - Action items with timelines
-        - Data visualization guidelines
-        - Narrative structure
-        - Technical appendix
-        - Presentation guidelines
-
-        Use clear section headers exactly as shown above, followed by detailed bullet points. Each point should be specific and actionable."""
+        """Get analysis plan with retry logic."""
+        def _call():
+            messages = [
+                SystemMessage(content=self.data_analyst_prompt),
+                HumanMessage(content=query)
+            ]
+            response = self.data_analyst.invoke(messages)
+            return self._parse_analysis_response(response.content)
         
-        response = self.data_analyst.invoke([
-            ("system", system_message),
-            ("human", f"Create analysis plan for: {query}")
-        ])
-        return self._parse_analysis_response(response.content)
+        return retry_with_backoff(_call)
 
     def _extract_section(self, text, section_name):
         """Extract specific sections from the response text."""
@@ -759,210 +665,41 @@ class PrimaryResearchConsultant:
             }
 
     def get_answer(self, query: str, user_id: str, chat_history: list = None) -> dict:
-        """Process a user query and return a structured response."""
+        """Get answer with retry logic."""
         try:
-            logging.info(f"Processing query for user {user_id}: {query}")
-            
-            # Determine the type of query
-            query_type = self._determine_query_type(query.lower())
-            logging.info(f"Query type determined: {query_type}")
+            # Determine query type
+            query_type = self._determine_query_type(query)
             
             # Generate research plan
-            logging.info("Generating research plan...")
             research_plan = self.generate_research_plan(query)
-            if "error" in research_plan:
-                logging.error(f"Error generating research plan: {research_plan['error']}")
-                return {"error": research_plan["error"]}
-
-            logging.info("Research plan generated successfully")
             
-            # Structure the response based on query type
-            response = {
-                "content": {
-                    "sections": []
-                },
-                "outputs": []
-            }
-
-            # Add relevant sections based on query type
-            if query_type == "focus_group":
-                if research_plan.get("focus_group_guide"):
-                    # Add Discussion Guide section
-                    if research_plan["focus_group_guide"].get("discussion_guide"):
-                        response["content"]["sections"].append({
-                            "title": "Discussion Guide",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["discussion_guide"]])
-                        })
-                        logging.info("Added discussion guide section")
-
-                    # Add Moderator Techniques section
-                    if research_plan["focus_group_guide"].get("moderator_techniques"):
-                        response["content"]["sections"].append({
-                            "title": "Moderator Techniques",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["moderator_techniques"]])
-                        })
-                        logging.info("Added moderator techniques section")
-
-                    # Add Group Exercises section
-                    if research_plan["focus_group_guide"].get("group_exercises"):
-                        response["content"]["sections"].append({
-                            "title": "Group Exercises",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["group_exercises"]])
-                        })
-                        logging.info("Added group exercises section")
-
-                    # Add Stimuli Materials section
-                    if research_plan["focus_group_guide"].get("stimuli"):
-                        response["content"]["sections"].append({
-                            "title": "Stimuli Materials",
-                            "content": "\n".join([f"• {item}" for item in research_plan["focus_group_guide"]["stimuli"]])
-                        })
-                        logging.info("Added stimuli materials section")
-
-                # Add focus group guide as a structured output
-                if research_plan.get("focus_group_guide"):
-                    response["outputs"].append({
-                        "type": "analysis",
-                        "title": "Focus Group Guide",
-                        "content": research_plan["focus_group_guide"]
-                    })
-                    logging.info("Added focus group guide output")
-
-            elif query_type == "survey":
-                if research_plan.get("survey_design"):
-                    # Add Survey Questions section
-                    if research_plan["survey_design"].get("survey_questions"):
-                        response["content"]["sections"].append({
-                            "title": "Survey Questions",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["survey_questions"]])
-                        })
-                        logging.info("Added survey questions section")
-
-                    # Add Response Scales section
-                    if research_plan["survey_design"].get("response_scales"):
-                        response["content"]["sections"].append({
-                            "title": "Response Scales",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["response_scales"]])
-                        })
-                        logging.info("Added response scales section")
-
-                    # Add Survey Flow section
-                    if research_plan["survey_design"].get("survey_flow"):
-                        response["content"]["sections"].append({
-                            "title": "Survey Flow",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["survey_flow"]])
-                        })
-                        logging.info("Added survey flow section")
-
-                    # Add Quality Controls section
-                    if research_plan["survey_design"].get("quality_controls"):
-                        response["content"]["sections"].append({
-                            "title": "Quality Controls",
-                            "content": "\n".join([f"• {item}" for item in research_plan["survey_design"]["quality_controls"]])
-                        })
-                        logging.info("Added quality controls section")
-
-                # Add survey design as a structured output
-                if research_plan.get("survey_design"):
-                    response["outputs"].append({
-                        "type": "analysis",
-                        "title": "Survey Design",
-                        "content": research_plan["survey_design"]
-                    })
-                    logging.info("Added survey design output")
-
-            elif query_type == "analysis":
-                if research_plan.get("analysis_plan"):
-                    # Add Analysis Methods section
-                    if research_plan["analysis_plan"].get("analysis_methods"):
-                        response["content"]["sections"].append({
-                            "title": "Analysis Methods",
-                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["analysis_methods"]])
-                        })
-                        logging.info("Added analysis methods section")
-
-                    # Add Key Metrics section
-                    if research_plan["analysis_plan"].get("key_metrics"):
-                        response["content"]["sections"].append({
-                            "title": "Key Metrics",
-                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["key_metrics"]])
-                        })
-                        logging.info("Added key metrics section")
-
-                    # Add Visualization Plan section
-                    if research_plan["analysis_plan"].get("visualization_plan"):
-                        response["content"]["sections"].append({
-                            "title": "Visualization Plan",
-                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["visualization_plan"]])
-                        })
-                        logging.info("Added visualization plan section")
-
-                    # Add Reporting Template section
-                    if research_plan["analysis_plan"].get("reporting_template"):
-                        response["content"]["sections"].append({
-                            "title": "Reporting Template",
-                            "content": "\n".join([f"• {item}" for item in research_plan["analysis_plan"]["reporting_template"]])
-                        })
-                        logging.info("Added reporting template section")
-
-                # Add analysis plan as a structured output
-                if research_plan.get("analysis_plan"):
-                    response["outputs"].append({
-                        "type": "analysis",
-                        "title": "Analysis Plan",
-                        "content": research_plan["analysis_plan"]
-                    })
-                    logging.info("Added analysis plan output")
-
-            else:  # General research query
-                if research_plan.get("research_design"):
-                    # Add Project Scope section
-                    if research_plan["research_design"].get("research_objectives"):
-                        response["content"]["sections"].append({
-                            "title": "Project Scope",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["research_objectives"]])
-                        })
-                        logging.info("Added project scope section")
-
-                    # Add Methodology section
-                    if research_plan["research_design"].get("methodology"):
-                        response["content"]["sections"].append({
-                            "title": "Methodology",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["methodology"]])
-                        })
-                        logging.info("Added methodology section")
-
-                    # Add Timeline section
-                    if research_plan["research_design"].get("timeline"):
-                        response["content"]["sections"].append({
-                            "title": "Timeline",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["timeline"]])
-                        })
-                        logging.info("Added timeline section")
-
-                    # Add Budget section
-                    if research_plan["research_design"].get("budget_considerations"):
-                        response["content"]["sections"].append({
-                            "title": "Budget Considerations",
-                            "content": "\n".join([f"• {item}" for item in research_plan["research_design"]["budget_considerations"]])
-                        })
-                        logging.info("Added budget section")
-
-                # Add research design as a structured output
-                if research_plan.get("research_design"):
-                    response["outputs"].append({
-                        "type": "analysis",
-                        "title": "Research Design",
-                        "content": research_plan["research_design"]
-                    })
-                    logging.info("Added research design output")
-
-            logging.info(f"Successfully structured response with {len(response['content']['sections'])} sections and {len(response['outputs'])} outputs")
-            return response
-
+            # Get focus group guide
+            focus_group_guide = self._get_focus_group_guide(research_plan)
+            
+            # Get survey design
+            survey_design = self._get_survey_design(query)
+            
+            # Get analysis plan
+            analysis_plan = self._get_analysis_plan(query)
+            
+            # Compile final plan
+            final_plan = self._compile_research_plan(
+                research_plan,
+                focus_group_guide,
+                survey_design,
+                analysis_plan,
+                {"user_id": user_id, "query_type": query_type}
+            )
+            
+            return final_plan
+            
         except Exception as e:
-            logging.error(f"Error in get_answer: {str(e)}")
-            return {"error": str(e)}
+            logger.error(f"Error in get_answer: {str(e)}")
+            return {
+                "error": str(e),
+                "type": "error",
+                "status": "error"
+            }
 
     def _determine_query_type(self, query: str) -> str:
         """Determine the type of research query based on keywords."""

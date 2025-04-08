@@ -2,20 +2,44 @@ from flask import Blueprint, request, jsonify, Response, stream_with_context
 from models.market_research_agent import MarketResearchAgent
 import json
 import traceback
+import logging
+from functools import wraps
+from typing import Dict, Any
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 market_research_bp = Blueprint('market_research', __name__)
+
+def handle_api_error(f):
+    """Decorator to handle API errors consistently."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {f.__name__}: {str(e)}")
+            logger.error(traceback.format_exc())
+            return jsonify({
+                'status': 'error',
+                'message': str(e),
+                'traceback': traceback.format_exc()
+            }), 500
+    return decorated_function
 
 # Initialize the agent at module level
 try:
     agent = MarketResearchAgent()
 except Exception as e:
-    print(f"Error initializing MarketResearchAgent: {str(e)}")
+    logger.error(f"Error initializing MarketResearchAgent: {str(e)}")
     agent = None
 
 @market_research_bp.route('/research', methods=['POST'])
+@handle_api_error
 def conduct_research():
     """
-    Endpoint to conduct market research based on user query with streaming response
+    Endpoint to conduct market research based on user query with streaming response.
+    Handles comprehensive research including exploratory, descriptive, and predictive analysis.
     """
     try:
         if agent is None:
@@ -33,6 +57,7 @@ def conduct_research():
             }), 400
             
         query = data['query']
+        user_id = data.get('user_id')
 
         def generate():
             try:
@@ -40,6 +65,14 @@ def conduct_research():
                     if chunk.get('status') == 'error':
                         yield f"data: {json.dumps(chunk)}\n\n"
                         return
+                    
+                    # Add metadata to each chunk
+                    chunk['metadata'] = {
+                        'timestamp': chunk.get('timestamp'),
+                        'user_id': user_id,
+                        'query': query
+                    }
+                    
                     yield f"data: {json.dumps(chunk)}\n\n"
             except Exception as e:
                 error_data = {
@@ -63,6 +96,8 @@ def conduct_research():
             }
         )
     except Exception as e:
+        logger.error(f"Error in conduct_research: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'status': 'error',
             'message': str(e),
@@ -82,17 +117,24 @@ def research_options():
     )
 
 @market_research_bp.route('/history', methods=['GET'])
+@handle_api_error
 def get_history():
     """
-    Endpoint to retrieve chat history
+    Endpoint to retrieve chat history with enhanced metadata
     """
     try:
         history = agent.get_chat_history()
         return jsonify({
             'status': 'success',
-            'history': history
+            'history': history,
+            'metadata': {
+                'total_messages': len(history),
+                'last_updated': history[-1]['timestamp'] if history else None
+            }
         })
     except Exception as e:
+        logger.error(f"Error in get_history: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'status': 'error',
             'message': str(e),

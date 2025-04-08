@@ -9,16 +9,11 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Send, Search, Brain, Target, CheckCircle, AlertCircle, BarChart, TrendingUp, Users, Globe } from "lucide-react";
+import { Loader2, Send, Search, Brain, Target, CheckCircle, AlertCircle, BarChart, TrendingUp, Users, Globe, BarChart3, Lightbulb, FileText, CheckCircle2, Clock, DollarSign, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-
-interface StreamingData {
-    type: 'thought' | 'action' | 'final' | 'error';
-    content: string;
-}
 
 interface ResearchSection {
     id: string;
@@ -27,7 +22,24 @@ interface ResearchSection {
     icon: any;
     color: string;
     timestamp: number;
+    type: 'exploratory' | 'descriptive' | 'predictive' | 'methodology' | 'recommendations';
 }
+
+const sectionIcons = {
+    exploratory: TrendingUp,
+    descriptive: BarChart3,
+    predictive: Lightbulb,
+    methodology: FileText,
+    recommendations: CheckCircle2
+};
+
+const sectionColors = {
+    exploratory: 'blue',
+    descriptive: 'green',
+    predictive: 'purple',
+    methodology: 'orange',
+    recommendations: 'indigo'
+};
 
 export default function MarketResearchPage() {
     const [query, setQuery] = useState('');
@@ -36,6 +48,7 @@ export default function MarketResearchPage() {
     const [streamContent, setStreamContent] = useState<ResearchSection[]>([]);
     const [progress, setProgress] = useState(0);
     const [currentSection, setCurrentSection] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<string>('all');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
     const { user } = useAuth();
@@ -94,11 +107,11 @@ export default function MarketResearchPage() {
                     if (line.startsWith('data: ')) {
                         try {
                             const data = JSON.parse(line.slice(6));
-
+                            
                             if (data.type === 'thought') {
                                 setCurrentSection('analysis');
                                 setStreamContent(prev => {
-                                    const existingSection = prev.find(s => s.title === 'Analysis');
+                                    const existingSection = prev.find(s => s.title === 'Research Analysis');
                                     if (existingSection) {
                                         return prev.map(s => 
                                             s.id === existingSection.id 
@@ -108,15 +121,17 @@ export default function MarketResearchPage() {
                                     }
                                     return [...prev, {
                                         id: `analysis-${Date.now()}`,
-                                        title: 'Analysis',
+                                        title: 'Research Analysis',
                                         content: data.content,
-                                        icon: Brain,
+                                        icon: Search,
                                         color: 'blue',
-                                        timestamp: Date.now()
+                                        timestamp: Date.now(),
+                                        type: 'methodology'
                                     }];
                                 });
-                                setProgress(prev => Math.min(prev + 30, 60));
-                            } else if (data.type === 'action') {
+                                setProgress(prev => Math.min(prev + 10, 80));
+                            }
+                            else if (data.type === 'action') {
                                 setCurrentSection('research');
                                 setStreamContent(prev => {
                                     const existingSection = prev.find(s => s.title === 'Research Action');
@@ -133,14 +148,39 @@ export default function MarketResearchPage() {
                                         content: data.content,
                                         icon: Target,
                                         color: 'green',
-                                        timestamp: Date.now()
+                                        timestamp: Date.now(),
+                                        type: 'methodology'
                                     }];
                                 });
                                 setProgress(prev => Math.min(prev + 20, 80));
-                            } else if (data.type === 'final') {
+                            }
+                            else if (data.type === 'observation') {
+                                setCurrentSection('findings');
+                                setStreamContent(prev => {
+                                    const existingSection = prev.find(s => s.title === 'Research Findings');
+                                    if (existingSection) {
+                                        return prev.map(s => 
+                                            s.id === existingSection.id 
+                                                ? { ...s, content: s.content + '\n' + data.content }
+                                                : s
+                                        );
+                                    }
+                                    return [...prev, {
+                                        id: `findings-${Date.now()}`,
+                                        title: 'Research Findings',
+                                        content: data.content,
+                                        icon: BarChart3,
+                                        color: 'purple',
+                                        timestamp: Date.now(),
+                                        type: 'descriptive'
+                                    }];
+                                });
+                                setProgress(prev => Math.min(prev + 15, 80));
+                            }
+                            else if (data.type === 'final') {
                                 setCurrentSection('final');
                                 setStreamContent(prev => {
-                                    const existingSection = prev.find(s => s.title === 'Final Report');
+                                    const existingSection = prev.find(s => s.title === 'Final Analysis');
                                     if (existingSection) {
                                         return prev.map(s => 
                                             s.id === existingSection.id 
@@ -150,23 +190,19 @@ export default function MarketResearchPage() {
                                     }
                                     return [...prev, {
                                         id: `final-${Date.now()}`,
-                                        title: 'Final Report',
+                                        title: 'Final Analysis',
                                         content: data.content,
-                                        icon: CheckCircle,
-                                        color: 'primary',
-                                        timestamp: Date.now()
+                                        icon: CheckCircle2,
+                                        color: 'indigo',
+                                        timestamp: Date.now(),
+                                        type: 'recommendations'
                                     }];
                                 });
                                 setProgress(100);
                                 setIsLoading(false);
-                            } else if (data.type === 'error') {
-                                setError(data.content);
-                                setIsLoading(false);
                             }
                         } catch (err) {
                             console.error('Error parsing SSE data:', err);
-                            setError('Failed to parse server response');
-                            setIsLoading(false);
                         }
                     }
                 }
@@ -177,6 +213,10 @@ export default function MarketResearchPage() {
             setIsLoading(false);
         }
     };
+
+    const filteredContent = activeTab === 'all' 
+        ? streamContent 
+        : streamContent.filter(section => section.type === activeTab);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -269,41 +309,58 @@ export default function MarketResearchPage() {
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-xl font-semibold">Research Results</h2>
-                            <Button onClick={() => setStreamContent([])}>Start New Research</Button>
+                            <div className="flex gap-2">
+                                <Button 
+                                    variant={activeTab === 'all' ? 'default' : 'outline'}
+                                    onClick={() => setActiveTab('all')}
+                                >
+                                    All
+                                </Button>
+                                <Button 
+                                    variant={activeTab === 'exploratory' ? 'default' : 'outline'}
+                                    onClick={() => setActiveTab('exploratory')}
+                                >
+                                    Exploratory
+                                </Button>
+                                <Button 
+                                    variant={activeTab === 'descriptive' ? 'default' : 'outline'}
+                                    onClick={() => setActiveTab('descriptive')}
+                                >
+                                    Descriptive
+                                </Button>
+                                <Button 
+                                    variant={activeTab === 'predictive' ? 'default' : 'outline'}
+                                    onClick={() => setActiveTab('predictive')}
+                                >
+                                    Predictive
+                                </Button>
+                                <Button 
+                                    variant={activeTab === 'recommendations' ? 'default' : 'outline'}
+                                    onClick={() => setActiveTab('recommendations')}
+                                >
+                                    Recommendations
+                                </Button>
+                                <Button onClick={() => setStreamContent([])}>Start New Research</Button>
+                            </div>
                         </div>
 
                         <div className="space-y-6">
-                            {streamContent.map((section, index) => (
+                            {filteredContent.map((section, index) => (
                                 <motion.div
                                     key={section.id}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: index * 0.1 }}
                                 >
-                                    <Card className={cn(
-                                        "border-l-4 transition-all duration-200",
-                                        section.color === 'blue' && "border-l-blue-500",
-                                        section.color === 'green' && "border-l-green-500",
-                                        section.color === 'primary' && "border-l-primary",
-                                        currentSection === section.title.toLowerCase().replace(' ', '') && "shadow-lg"
-                                    )}>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-3">
-                                                <div className={cn(
-                                                    "p-2 rounded-lg transition-colors duration-200",
-                                                    section.color === 'blue' && "bg-blue-50",
-                                                    section.color === 'green' && "bg-green-50",
-                                                    section.color === 'primary' && "bg-primary/10"
-                                                )}>
-                                                    <section.icon className={cn(
-                                                        "w-5 h-5 transition-colors duration-200",
-                                                        section.color === 'blue' && "text-blue-500",
-                                                        section.color === 'green' && "text-green-500",
-                                                        section.color === 'primary' && "text-primary"
-                                                    )} />
-                                                </div>
-                                                <span>{section.title}</span>
+                                    <Card className="border-l-4 border-l-blue-500">
+                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                                                <section.icon className={`h-5 w-5 text-${section.color}-500`} />
+                                                {section.title}
                                             </CardTitle>
+                                            <div className="text-sm text-gray-500">
+                                                {new Date(section.timestamp).toLocaleTimeString()}
+                                            </div>
                                         </CardHeader>
                                         <CardContent>
                                             <div className="prose prose-sm max-w-none">

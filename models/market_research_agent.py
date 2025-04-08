@@ -4,23 +4,48 @@ from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.tools import Tool
 from langchain_community.utilities import SerpAPIWrapper
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain.callbacks.base import BaseCallbackHandler
 import json
 import os
 from dotenv import load_dotenv
+import time
+import logging
+from anthropic._exceptions import OverloadedError, RateLimitError, APIError
 
-load_dotenv()
+# Configure logging
+logger = logging.getLogger(__name__)
 
-# Validate required environment variables
-required_env_vars = {
-    "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
-    "SERPAPI_API_KEY": os.getenv("SERPAPI_API_KEY")
-}
+def retry_with_backoff(func, max_retries=3, base_delay=2, max_delay=10):
+    """Execute a function with exponential backoff retry logic."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except (OverloadedError, RateLimitError) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
+                time.sleep(delay)
+            continue
+        except APIError as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logger.warning(f"Attempt {attempt + 1} failed with {str(e)}. Retrying in {delay} seconds...")
+                time.sleep(delay)
+            continue
+        except Exception as e:
+            raise e
 
-missing_vars = [var for var, value in required_env_vars.items() if not value]
-if missing_vars:
-    raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_vars)}")
+    if last_error:
+        if isinstance(last_error, OverloadedError):
+            raise Exception("The AI service is currently experiencing high demand. Please try again in a few moments.")
+        elif isinstance(last_error, RateLimitError):
+            raise Exception("Too many requests. Please wait a moment before trying again.")
+        else:
+            raise Exception(f"An error occurred: {str(last_error)}")
 
 class StreamingCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming intermediate steps."""
@@ -117,7 +142,7 @@ class MarketResearchAgent:
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             temperature=0.7,
             streaming=True,
-            max_tokens=4000  # Limit token usage
+            max_tokens=4000
         )
         print("✅ LLM initialized")
         
@@ -136,14 +161,53 @@ class MarketResearchAgent:
             )
         ]
         
-        # Simplified prompt template to reduce token usage
-        template = """You are an expert market research analyst. Provide detailed market analysis using real-time data.
+        # Enhanced prompt template for comprehensive research
+        template = """You are an expert market research analyst specializing in comprehensive market research. Your role is to conduct thorough research using both quantitative and qualitative methods, including exploratory, descriptive, and predictive research approaches.
+
+Research Types to Consider:
+1. Exploratory Research
+   - Market trends and patterns
+   - Consumer behavior insights
+   - Emerging opportunities
+   - Problem identification
+   - Hypothesis generation
+
+2. Descriptive Research
+   - Market size and segmentation
+   - Competitive landscape
+   - Customer demographics
+   - Product/service usage patterns
+   - Brand perception
+
+3. Predictive Research
+   - Market forecasting
+   - Trend analysis
+   - Consumer behavior prediction
+   - Risk assessment
+   - Opportunity identification
+
+Research Methods:
+1. Quantitative Methods
+   - Statistical analysis
+   - Surveys and questionnaires
+   - Market metrics
+   - Data modeling
+   - Performance indicators
+
+2. Qualitative Methods
+   - Focus groups
+   - In-depth interviews
+   - Ethnographic research
+   - Content analysis
+   - Expert opinions
 
 Guidelines:
 - Use specific search queries to gather targeted information
 - Always cite sources and dates
 - Use concrete numbers and statistics
 - Focus on actionable insights
+- Combine multiple research types and methods
+- Provide comprehensive analysis with clear recommendations
 
 Available Tools:
 {tools}
@@ -158,12 +222,25 @@ Observation: [search result]
 Thought: [final analysis reasoning]
 Final Answer: [structured analysis]
 
+Research Report Structure:
 1. Executive Summary
-2. Market Overview
-3. Competitive Analysis
-4. Trends & Opportunities
-5. Risks & Challenges
-6. Recommendations
+2. Research Objectives
+3. Methodology Overview
+   - Research Types Used
+   - Methods Applied
+   - Data Sources
+4. Market Overview
+5. Exploratory Findings
+6. Descriptive Analysis
+7. Predictive Insights
+8. Competitive Analysis
+9. Consumer Insights
+10. Recommendations
+    - Short-term Actions
+    - Long-term Strategy
+    - Risk Mitigation
+11. Implementation Plan
+12. Success Metrics
 
 Previous conversation (last 3):
 {chat_history}
@@ -197,26 +274,29 @@ Question: {input}
             Dict[str, Any]: Stream of thoughts, actions, and the final analysis
         """
         try:
-            print(f"\n📝 Starting research for query: {query}")
+            print(f"\n📝 Starting comprehensive research for query: {query}")
             handler = StreamingCallbackHandler()
             
             agent_executor = AgentExecutor.from_agent_and_tools(
                 agent=self.agent,
                 tools=self.tools,
                 handle_parsing_errors=True,
-                max_iterations=6,  # Increased from 4
-                max_execution_time=300,  # Increased from 240
+                max_iterations=8,  # Increased for comprehensive research
+                max_execution_time=600,  # Increased for thorough analysis
                 callbacks=[handler],
                 early_stopping_method="force",
                 verbose=True
             )
             
             try:
-                # Run the agent
-                response = agent_executor.invoke({
-                    "input": query,
-                    "chat_history": self.chat_history[-3:]
-                })
+                # Run the agent with retry logic
+                def _execute_research():
+                    return agent_executor.invoke({
+                        "input": query,
+                        "chat_history": self.chat_history[-3:]
+                    })
+                
+                response = retry_with_backoff(_execute_research)
                 
                 # Update chat history
                 self.chat_history.extend([
