@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase, checkAuth } from '../../lib/supabaseClient';
 import {
     ChartBarIcon,
     DocumentTextIcon,
@@ -32,9 +32,7 @@ interface AnalyticsData {
 
 export default function Dashboard() {
     const router = useRouter();
-    const supabase = createClientComponentClient();
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [analytics, setAnalytics] = useState<AnalyticsData>({
         totalRevenue: 0,
         revenueGrowth: 0,
@@ -47,59 +45,73 @@ export default function Dashboard() {
     });
 
     useEffect(() => {
-        const checkAuth = async () => {
-            const { data: { session }, error } = await supabase.auth.getSession();
-            
-            if (error || !session) {
-                router.push('/auth');
-                return;
-            }
-            
-            fetchData();
-        };
-
-        checkAuth();
-    }, [router]);
-
-    const fetchData = async () => {
-        setIsLoading(true);
-        setError(null);
-        
-        try {
-            const response = await fetch('/api/analytics', {
-                credentials: 'include',
-                headers: {
-                    'Cache-Control': 'no-cache'
-                }
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                if (response.status === 401) {
-                    router.push('/auth');
+        const loadDashboard = async () => {
+            try {
+                // Check authentication
+                const { session, error } = await checkAuth();
+                
+                if (error || !session) {
+                    console.error('Auth error:', error);
+                    router.push('/auth?redirectTo=/dashboard');
                     return;
                 }
-                throw new Error(errorData.error || 'Failed to fetch analytics data');
+                
+                // Fetch analytics data directly from Supabase
+                const { data, error: dbError } = await supabase
+                    .from('analytics')
+                    .select('*')
+                    .eq('user_id', session.user.id)
+                    .single();
+                
+                if (dbError) {
+                    console.error('Database error:', dbError);
+                    // Use default values if no data exists
+                    setAnalytics({
+                        totalRevenue: 0,
+                        revenueGrowth: 0,
+                        activeClients: 0,
+                        clientGrowth: 0,
+                        documentsGenerated: 0,
+                        documentGrowth: 0,
+                        averageCompletionTime: 0,
+                        timeGrowth: 0
+                    });
+                } else {
+                    // Set analytics data from database
+                    setAnalytics({
+                        totalRevenue: data.total_revenue || 0,
+                        revenueGrowth: data.revenue_growth || 0,
+                        activeClients: data.active_clients || 0,
+                        clientGrowth: data.client_growth || 0,
+                        documentsGenerated: data.documents_generated || 0,
+                        documentGrowth: data.document_growth || 0,
+                        averageCompletionTime: data.average_completion_time || 0,
+                        timeGrowth: data.time_growth || 0
+                    });
+                }
+            } catch (err) {
+                console.error('Error loading dashboard:', err);
+                // Use default values on error
+                setAnalytics({
+                    totalRevenue: 0,
+                    revenueGrowth: 0,
+                    activeClients: 0,
+                    clientGrowth: 0,
+                    documentsGenerated: 0,
+                    documentGrowth: 0,
+                    averageCompletionTime: 0,
+                    timeGrowth: 0
+                });
+            } finally {
+                // Always set loading to false after a short delay to ensure UI updates
+                setTimeout(() => {
+                    setIsLoading(false);
+                }, 500);
             }
-            
-            const data = await response.json();
-            setAnalytics({
-                totalRevenue: data.total_revenue || 0,
-                revenueGrowth: data.revenue_growth || 0,
-                activeClients: data.active_clients || 0,
-                clientGrowth: data.client_growth || 0,
-                documentsGenerated: data.documents_generated || 0,
-                documentGrowth: data.document_growth || 0,
-                averageCompletionTime: data.average_completion_time || 0,
-                timeGrowth: data.time_growth || 0
-            });
-        } catch (error) {
-            console.error('Error fetching analytics:', error);
-            setError(error instanceof Error ? error.message : 'Failed to load analytics data');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        };
+
+        loadDashboard();
+    }, [router]);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
@@ -130,19 +142,6 @@ export default function Dashboard() {
                             </svg>
                             <p className="text-gray-500">Loading analytics...</p>
                         </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="bg-red-50 p-4 rounded-lg flex items-center gap-2 shadow-sm">
-                        <XCircleIcon className="h-5 w-5 text-red-500" />
-                        <p className="text-red-700">{error}</p>
                     </div>
                 </div>
             </div>

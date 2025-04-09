@@ -29,6 +29,7 @@ export default function Auth() {
                 return;
             }
             if (session) {
+                console.log('Session found, redirecting to:', redirectTo);
                 router.push(redirectTo);
             }
         } catch (err) {
@@ -139,6 +140,9 @@ export default function Auth() {
         try {
             const { error } = await supabase.auth.signInWithOtp({
                 email,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`
+                }
             });
             
             if (error) throw error;
@@ -154,7 +158,8 @@ export default function Auth() {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session) {
                     clearInterval(checkInterval);
-                    router.push('/consultant'); // Always redirect to consultant page
+                    console.log('Magic link session found, redirecting to:', redirectTo);
+                    router.push(redirectTo);
                 }
             }, 2000); // Check every 2 seconds
 
