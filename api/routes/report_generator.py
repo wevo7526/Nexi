@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from models.agent_teams import create_report_generator
-from models.llm import get_llm
+from langchain_anthropic import ChatAnthropic
 import json
 import traceback
 from supabase import create_client
@@ -10,7 +10,12 @@ from datetime import datetime
 report_generator_bp = Blueprint('report_generator', __name__)
 
 # Initialize the LLM and report generator
-llm = get_llm()
+llm = ChatAnthropic(
+    model="claude-3-sonnet-20240229",
+    anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=0.7,
+    max_tokens=4000
+)
 report_generator = create_report_generator(llm)
 
 # Initialize Supabase client

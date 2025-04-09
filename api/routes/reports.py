@@ -15,7 +15,7 @@ import io
 import json
 import logging
 import uuid
-from models.llm import get_llm
+from langchain_anthropic import ChatAnthropic
 from langchain.schema import HumanMessage
 
 # Load environment variables
@@ -53,8 +53,13 @@ try:
 except Exception as e:
     logger.warning(f"Could not set directory permissions: {str(e)}")
 
-# Initialize the LLM
-llm = get_llm()
+# Initialize LLM
+llm = ChatAnthropic(
+    model="claude-3-sonnet-20240229",
+    anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=0.7,
+    max_tokens=4000
+)
 
 def format_sse(data):
     """Format data as SSE."""
