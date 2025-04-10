@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Send, CheckCircle, AlertCircle, BookOpen, Users, ClipboardList, BarChart3, Clock, DollarSign, CheckCircle2, ChevronRight, Search } from "lucide-react";
+import { Loader2, Send, CheckCircle, AlertCircle, BookOpen, Users, ClipboardList, BarChart3, Clock, DollarSign, CheckCircle2, ChevronRight, Search, Bot, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -16,17 +16,12 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:500
 interface ResearchSection {
     title: string;
     content: string | string[];
+    type: string;
 }
 
 interface ResearchResponse {
-    content: {
-        sections: ResearchSection[];
-    };
-    outputs: Array<{
-        type: string;
-        title: string;
-        content: Record<string, any>;
-    }>;
+    type: string;
+    content: string | ResearchSection[];
 }
 
 interface ContentItem {
@@ -315,48 +310,68 @@ export const ReportContent = ({ content }: { content: any }) => {
     );
 };
 
-export default function MultiAgentPage() {
+export default function ResearchAssistant() {
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [researchData, setResearchData] = useState<ResearchResponse | null>(null);
-    const [streamContent, setStreamContent] = useState<ContentItem[]>([]);
-    const [progress, setProgress] = useState(0);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
+    const [researchData, setResearchData] = useState<ResearchSection[]>([]);
+    const [status, setStatus] = useState<string>('');
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
 
     useEffect(() => {
-        scrollToBottom();
-    }, [streamContent, researchData]);
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [researchData, chatHistory]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!query.trim()) return;
+        if (!query.trim() || isLoading) return;
 
         setIsLoading(true);
         setError(null);
-        setStreamContent([]);
-        setProgress(0);
+        setResearchData([]);
+        setStatus('');
+
+        // Add user message to chat history
+        setChatHistory(prev => [...prev, { role: 'user', content: query }]);
 
         try {
-            const response = await fetch(`${BACKEND_URL}/api/multi-agent/chat`, {
+            // Check if backend is running
+            try {
+                const healthCheck = await fetch('/api/health', { method: 'GET' });
+                if (!healthCheck.ok) {
+                    throw new Error('Backend service is not available');
+                }
+            } catch (e) {
+                console.error('Backend health check failed:', e);
+                setError('Backend service is not available. Please try again later.');
+                setIsLoading(false);
+                return;
+            }
+
+            const response = await fetch('/api/multi-agent/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 body: JSON.stringify({
                     query,
-                })
+                    chat_history: chatHistory,
+                }),
             });
 
-            if (!response.ok) throw new Error('Failed to fetch response');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('API error:', errorData);
+                throw new Error(`Failed to get response: ${response.status} ${response.statusText}`);
+            }
 
             const reader = response.body?.getReader();
-            if (!reader) throw new Error('No reader available');
+            if (!reader) {
+                throw new Error('No reader available');
+            }
 
             const decoder = new TextDecoder();
             let buffer = '';
@@ -371,45 +386,87 @@ export default function MultiAgentPage() {
 
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
+                        const data = line.slice(6);
+                        if (data === '[DONE]') {
+                            console.log('Received [DONE] message, completing stream');
+                            setIsLoading(false);
+                            continue;
+                        }
 
-                            switch (data.type) {
-                                case 'status':
-                                    setStreamContent(prev => [
-                                        ...prev,
-                                        {
-                                            type: 'status',
-                                            content: data.content
+                        try {
+                            const parsed = JSON.parse(data);
+                            
+                            if (parsed.type === 'status') {
+                                setStatus(parsed.content);
+                            } else if (parsed.type === 'research') {
+                                try {
+                                    // Log the raw content for debugging
+                                    console.log('Raw research content:', parsed.content);
+                                    
+                                    // Parse the content if it's a string
+                                    let content;
+                                    if (typeof parsed.content === 'string') {
+                                        try {
+                                            content = JSON.parse(parsed.content);
+                                            console.log('Parsed research content:', content);
+                                        } catch (parseError) {
+                                            console.error('Error parsing research content as JSON:', parseError);
+                                            // If parsing fails, use the string content directly
+                                            content = {
+                                                title: parsed.section || 'Section',
+                                                content: parsed.content
+                                            };
                                         }
-                                    ]);
-                                    setProgress(prev => Math.min(prev + 20, 100));
-                                    break;
-                                case 'content':
-                                    setStreamContent(prev => [
-                                        ...prev,
-                                        {
-                                            type: 'content',
-                                            title: data.section,
-                                            content: data.content
-                                        }
-                                    ]);
-                                    break;
-                                case 'final':
-                                    setResearchData(data.content);
-                                    setProgress(100);
-                                    break;
-                                case 'error':
-                                    setError(data.content);
-                                    break;
+                                    } else {
+                                        content = parsed.content;
+                                    }
+                                    
+                                    // Create a ResearchSection object
+                                    const section: ResearchSection = {
+                                        title: content.title || parsed.section || 'Section',
+                                        content: content.content || '',
+                                        type: 'research'
+                                    };
+                                    
+                                    console.log('Adding research section:', section);
+                                    setResearchData(prev => [...prev, section]);
+                                } catch (e) {
+                                    console.error('Error processing research content:', e);
+                                    setError('Error processing research content: ' + (e instanceof Error ? e.message : String(e)));
+                                }
+                            } else if (parsed.type === 'error') {
+                                console.error('Received error from server:', parsed.content);
+                                setError(parsed.content);
+                                setIsLoading(false);
+                            } else if (parsed.type === 'final') {
+                                console.log('Received final message:', parsed.content);
+                                // Process final content if needed
+                                setIsLoading(false);
                             }
                         } catch (e) {
-                            console.error('Failed to parse server response:', e);
-                            setError('Failed to parse server response');
+                            console.error('Error parsing SSE data:', e);
                         }
                     }
                 }
             }
+
+            // If we've reached here and isLoading is still true, set it to false
+            if (isLoading) {
+                console.log('Stream completed but isLoading is still true, setting to false');
+                setIsLoading(false);
+            }
+
+            // Add assistant response to chat history
+            if (researchData.length > 0) {
+                console.log('Updating chat history with research data');
+                setChatHistory(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: researchData.map(section => `${section.title}\n${section.content}`).join('\n\n')
+                }]);
+            } else {
+                console.log('No research data to add to chat history');
+            }
+
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
@@ -419,131 +476,83 @@ export default function MultiAgentPage() {
 
     return (
         <div className="container mx-auto p-4 max-w-4xl">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-            >
-                <div className="mb-6">
-                    <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent mb-4">
-                        Research Analysis Assistant
-                    </h1>
-                    <Card className="border-gray-100 shadow-sm">
-                        <CardContent className="pt-6">
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="flex gap-2">
-                                    <Input
-                                        value={query}
-                                        onChange={(e) => setQuery(e.target.value)}
-                                        placeholder="Enter your research query..."
-                                        className="flex-1 border-gray-200 focus:border-primary/50 focus:ring-primary/50"
-                                        disabled={isLoading}
-                                    />
-                                    <Button 
-                                        type="submit" 
-                                        disabled={isLoading}
-                                        className="bg-primary hover:bg-primary/90"
-                                    >
-                                        {isLoading ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <Send className="h-4 w-4" />
+            <div className="flex flex-col h-[calc(100vh-2rem)]">
+                <div className="mb-4">
+                    <h1 className="text-2xl font-bold text-center mb-4">Research Assistant</h1>
+                    <form onSubmit={handleSubmit} className="flex gap-2">
+                        <Input
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Ask about research design, methodology, or analysis..."
+                            disabled={isLoading}
+                            className="flex-1"
+                        />
+                        <Button type="submit" disabled={isLoading}>
+                            {isLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Send className="w-4 h-4" />
+                            )}
+                        </Button>
+                    </form>
+                </div>
+                
+                <div className="flex-1 overflow-hidden">
+                    <div ref={scrollRef} className="h-full overflow-auto">
+                        <div className="space-y-4 p-4">
+                            <AnimatePresence>
+                                {chatHistory.map((message, index) => (
+                                    <motion.div
+                                        key={index}
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -20 }}
+                                        className={cn(
+                                            "flex items-start gap-3 p-4 rounded-lg",
+                                            message.role === 'user' ? "bg-primary/10" : "bg-secondary/10"
                                         )}
-                                    </Button>
-                                </div>
-                            </form>
-                        </CardContent>
-                    </Card>
+                                    >
+                                        {message.role === 'user' ? (
+                                            <User className="w-6 h-6 text-primary" />
+                                        ) : (
+                                            <Bot className="w-6 h-6 text-secondary" />
+                                        )}
+                                        <div className="flex-1 space-y-2">
+                                            <p className="text-sm text-muted-foreground">
+                                                {message.role === 'user' ? 'You' : 'Research Assistant'}
+                                            </p>
+                                            <div className="prose prose-sm max-w-none">
+                                                {message.content}
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
+
+                            {isLoading && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="flex items-center justify-center p-4"
+                                >
+                                    <Loader2 className="w-6 h-6 animate-spin" />
+                                    <span className="ml-2">{status || 'Processing...'}</span>
+                                </motion.div>
+                            )}
+
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="p-4 bg-destructive/10 text-destructive rounded-lg"
+                                >
+                                    {error}
+                                </motion.div>
+                            )}
+                        </div>
+                    </div>
                 </div>
-            </motion.div>
-
-            <AnimatePresence>
-                {error && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <Alert variant="destructive" className="mb-6">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>{error}</AlertDescription>
-                        </Alert>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {isLoading && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                >
-                    <Card className="mb-6 border-gray-100 shadow-sm">
-                        <CardContent className="pt-6">
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-gray-700">Analysis Progress</span>
-                                    <span className="text-sm text-muted-foreground">{progress}%</span>
-                                </div>
-                                <Progress value={progress} className="h-2 bg-gray-100" />
-                                {streamContent.find(item => item.type === 'status')?.content && (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        <span>{streamContent.find(item => item.type === 'status')?.content}</span>
-                                    </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-            )}
-
-            <ScrollArea className="h-[600px] rounded-xl border border-gray-100 p-4">
-                <div className="space-y-8">
-                    {researchData?.content?.sections && (
-                        <div className="space-y-8">
-                            {researchData.content.sections.map((section, index) => (
-                                <ContentSection
-                                    key={index}
-                                    title={section.title}
-                                    content={section.content}
-                                    icon={Users}
-                                />
-                            ))}
-                        </div>
-                    )}
-
-                    {researchData?.outputs?.map((output, index) => (
-                        <div key={index} className="space-y-6">
-                            <h2 className="text-xl font-semibold text-primary">{output.title}</h2>
-                            <ReportContent content={output.content} />
-                        </div>
-                    ))}
-                    
-                    {streamContent.filter(item => item.type === 'content').map((item, index) => (
-                        <div key={index} className="space-y-4">
-                            <h2 className="text-xl font-semibold text-primary capitalize">
-                                {item.title?.replace('_', ' ')}
-                            </h2>
-                            <ReportContent 
-                                content={(() => {
-                                    try {
-                                        if (typeof item.content === 'string') {
-                                            return JSON.parse(item.content);
-                                        }
-                                        return item.content || [];
-                                    } catch (e) {
-                                        console.error('Error parsing content:', e);
-                                        return item.content || [];
-                                    }
-                                })()} 
-                            />
-                        </div>
-                    ))}
-                </div>
-                <div ref={messagesEndRef} />
-            </ScrollArea>
+            </div>
         </div>
     );
 } 

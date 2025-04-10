@@ -28,7 +28,7 @@ from api.routes.chat import chat_bp
 from api.routes.market_research import market_research_bp
 from api.routes.insights import insights_bp
 from models.agent_model import ConsultantAgent
-from models.multi_agent_model import PrimaryResearchConsultant
+from models.multi_agent_model import ResearchAssistantSystem
 from api.services.supabase_service import SupabaseService
 from api.routes.reports import reports_bp
 from api.routes.multi_agent import multi_agent_bp
@@ -104,7 +104,7 @@ if missing_vars:
 document_service = DocumentService()
 supabase_service = SupabaseService()
 consultant_agent = ConsultantAgent()
-primary_research_consultant = PrimaryResearchConsultant()
+research_assistant_system = ResearchAssistantSystem()
 market_research_agent = MarketResearchAgent()
 business_consultant_agent = BusinessConsultantAgent()
 multi_agent_system = MultiAgentSystem()

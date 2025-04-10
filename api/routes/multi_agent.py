@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, Response, stream_with_context
-from models.multi_agent_model import PrimaryResearchConsultant
+from models.multi_agent_model import ResearchAssistantSystem
 from config.settings import ANTHROPIC_API_KEY
 import json
 import logging
@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 
 multi_agent_bp = Blueprint('multi_agent', __name__)
 
-# Initialize the consultant with proper error handling
+# Initialize the research assistant system with proper error handling
 try:
-    consultant = PrimaryResearchConsultant()
-    logger.info("Successfully initialized PrimaryResearchConsultant")
+    research_system = ResearchAssistantSystem()
+    logger.info("Successfully initialized ResearchAssistantSystem")
 except Exception as e:
-    logger.error(f"Failed to initialize PrimaryResearchConsultant: {str(e)}")
-    consultant = None
+    logger.error(f"Failed to initialize ResearchAssistantSystem: {str(e)}")
+    research_system = None
 
 def handle_errors(f):
     @wraps(f)
@@ -66,13 +66,13 @@ def get_answer():
         user_id = data.get('user_id', 'anonymous')
         chat_history = data.get('chat_history', [])
 
-        if not consultant:
-            return jsonify({"error": "Research consultant not initialized"}), 500
+        if not research_system:
+            return jsonify({"error": "Research assistant system not initialized"}), 500
 
         def generate():
             try:
-                # Get the response from the consultant
-                response = consultant.get_answer(query, user_id, chat_history)
+                # Get the response from the research system
+                response = research_system.get_answer(query, user_id, chat_history)
                 
                 # Send the response as a JSON string with proper SSE format
                 yield f"data: {json.dumps({'type': 'response', 'content': response})}\n\n"
@@ -95,8 +95,6 @@ def get_answer():
 @cross_origin(
     origins=['http://localhost:3000'],
     allow_headers=['Content-Type', 'Authorization'],
-    supports_credentials=True,
-    max_age=3600,
     expose_headers=['Content-Type', 'Authorization'],
     allow_credentials=True,
     methods=['POST', 'OPTIONS']
@@ -110,10 +108,14 @@ def chat():
             return jsonify({"error": "No query provided"}), 400
 
         query = data['query']
+        chat_history = data.get('chat_history', [])
         user_id = data.get('user_id', 'anonymous')
 
-        if not consultant:
-            return jsonify({"error": "Research consultant not initialized"}), 500
+        logger.info(f"Received query: {query}")
+        logger.info(f"Chat history length: {len(chat_history) if chat_history else 0}")
+
+        if not research_system:
+            return jsonify({"error": "Research assistant system not initialized"}), 500
 
         def generate():
             try:
@@ -121,18 +123,33 @@ def chat():
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Starting research design...'})}\n\n"
 
                 # Use the research_stream method to get a comprehensive research design
-                for chunk in consultant.research_stream(query):
+                for chunk in research_system.research_stream(query, chat_history):
                     if chunk:
-                        # Ensure content is properly formatted as JSON string if it's not already
-                        if isinstance(chunk.get('content'), (dict, list)):
-                            chunk['content'] = json.dumps(chunk['content'])
+                        # Log the chunk type for debugging
+                        logger.info(f"Processing chunk type: {chunk.get('type')}")
+                        
+                        # Convert 'content' type to 'research' type for frontend compatibility
+                        if chunk.get('type') == 'content':
+                            chunk['type'] = 'research'
+                            
+                            # Ensure content is properly formatted as JSON string if it's not already
+                            if isinstance(chunk.get('content'), (dict, list)):
+                                chunk['content'] = json.dumps(chunk['content'])
+                                logger.info(f"Converted content to JSON string: {chunk['content'][:100]}...")
+                        
                         # Ensure each chunk is properly formatted as SSE
-                        yield f"data: {json.dumps(chunk)}\n\n"
+                        sse_data = f"data: {json.dumps(chunk)}\n\n"
+                        logger.info(f"Sending SSE data: {sse_data[:100]}...")
+                        yield sse_data
                 
                 # Send final status
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Research design complete'})}\n\n"
                 
+                # Send final content message
+                yield f"data: {json.dumps({'type': 'final', 'content': 'Research design process completed successfully'})}\n\n"
+                
                 # Send end message
+                logger.info("Sending [DONE] message")
                 yield "data: [DONE]\n\n"
                 
             except Exception as e:
@@ -150,7 +167,6 @@ def chat():
                 'X-Accel-Buffering': 'no'
             }
         )
-
     except Exception as e:
         logger.error(f"Error in chat route: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -179,7 +195,7 @@ def analyze():
         return jsonify({"error": "Query is required"}), 400
 
     # Generate complete research plan
-    plan = consultant.generate_research_plan(query, client_info)
+    plan = research_system.generate_research_plan(query, client_info)
     if "error" in plan:
         return jsonify({
             "error": plan["error"],
@@ -206,4 +222,12 @@ def chat_options():
     response.headers['Access-Control-Allow-Methods'] = 'POST,OPTIONS'
     response.headers['Access-Control-Allow-Credentials'] = 'true'
     response.headers['Access-Control-Max-Age'] = '3600'
-    return response 
+    return response
+
+@multi_agent_bp.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint to verify the backend is running."""
+    return jsonify({
+        'status': 'ok',
+        'message': 'Backend service is running'
+    }), 200 
