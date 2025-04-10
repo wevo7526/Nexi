@@ -527,9 +527,17 @@ export default function MultiAgentPage() {
                                 {item.title?.replace('_', ' ')}
                             </h2>
                             <ReportContent 
-                                content={typeof item.content === 'string' 
-                                    ? JSON.parse(item.content) 
-                                    : item.content || []} 
+                                content={(() => {
+                                    try {
+                                        if (typeof item.content === 'string') {
+                                            return JSON.parse(item.content);
+                                        }
+                                        return item.content || [];
+                                    } catch (e) {
+                                        console.error('Error parsing content:', e);
+                                        return item.content || [];
+                                    }
+                                })()} 
                             />
                         </div>
                     ))}

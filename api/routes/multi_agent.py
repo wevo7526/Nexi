@@ -118,112 +118,28 @@ def chat():
         def generate():
             try:
                 # Initial status
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Starting research analysis...'})}\n\n"
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Starting research design...'})}\n\n"
 
-                # Research Design Phase
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Designing research plan...'})}\n\n"
-                research_design = consultant._get_research_design(query)
-                if "error" in research_design:
-                    yield f"data: {json.dumps({'type': 'error', 'content': research_design['error']})}\n\n"
-                    return
-                yield f"data: {json.dumps({'type': 'content', 'section': 'research_design', 'content': format_content(research_design)})}\n\n"
-
-                # Focus Group Design Phase
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Creating focus group guide...'})}\n\n"
-                focus_group_guide = consultant._get_focus_group_guide(query)
-                if "error" in focus_group_guide:
-                    logger.warning(f"Focus group guide warning: {focus_group_guide['error']}")
-                    focus_group_guide = {
-                        "sections": [
-                            {
-                                "title": "Discussion Guide",
-                                "content": "Basic discussion guide for focus groups"
-                            }
-                        ]
-                    }
-                else:
-                    # Ensure the focus group guide has the correct structure
-                    if not isinstance(focus_group_guide, dict):
-                        focus_group_guide = {
-                            "sections": [
-                                {
-                                    "title": "Discussion Guide",
-                                    "content": str(focus_group_guide)
-                                }
-                            ]
-                        }
-                    elif "sections" not in focus_group_guide:
-                        focus_group_guide = {
-                            "sections": [
-                                {
-                                    "title": "Discussion Guide",
-                                    "content": json.dumps(focus_group_guide)
-                                }
-                            ]
-                        }
+                # Use the research_stream method to get a comprehensive research design
+                for chunk in consultant.research_stream(query):
+                    if chunk:
+                        # Ensure content is properly formatted as JSON string if it's not already
+                        if isinstance(chunk.get('content'), (dict, list)):
+                            chunk['content'] = json.dumps(chunk['content'])
+                        # Ensure each chunk is properly formatted as SSE
+                        yield f"data: {json.dumps(chunk)}\n\n"
                 
-                yield f"data: {json.dumps({'type': 'content', 'section': 'focus_group', 'content': format_content(focus_group_guide)})}\n\n"
-
-                # Survey Design Phase
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Designing survey...'})}\n\n"
-                try:
-                    survey_design = consultant._get_survey_design(query)
-                    if "error" in survey_design:
-                        logger.warning(f"Survey design warning: {survey_design['error']}")
-                        survey_design = {
-                            "sections": [
-                                {
-                                    "title": "Basic Information",
-                                    "questions": [
-                                        "How satisfied were you with your visit?",
-                                        "Would you recommend us to others?",
-                                        "What aspects did you enjoy most?"
-                                    ]
-                                }
-                            ]
-                        }
-                    yield f"data: {json.dumps({'type': 'content', 'section': 'survey', 'content': format_content(survey_design)})}\n\n"
-                except Exception as e:
-                    logger.error(f"Error in survey design: {str(e)}")
-                    yield f"data: {json.dumps({'type': 'error', 'content': 'Error in survey design, continuing with analysis...'})}\n\n"
-
-                # Analysis Plan Phase
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Creating analysis plan...'})}\n\n"
-                analysis_plan = consultant._get_analysis_plan(query)
-                if "error" in analysis_plan:
-                    yield f"data: {json.dumps({'type': 'error', 'content': analysis_plan['error']})}\n\n"
-                    return
-                yield f"data: {json.dumps({'type': 'content', 'section': 'analysis', 'content': format_content(analysis_plan)})}\n\n"
-
-                # Compile Final Report
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Compiling final research plan...'})}\n\n"
-                final_plan = consultant._compile_research_plan(
-                    research_design,
-                    focus_group_guide,
-                    survey_design if 'survey_design' in locals() else None,
-                    analysis_plan,
-                    data.get('client_info', {})
-                )
-
-                # Ensure the final plan has the correct structure
-                if not isinstance(final_plan, dict):
-                    final_plan = {
-                        "research_objectives": [],
-                        "methodology": [],
-                        "sample_design": [],
-                        "timeline": [],
-                        "budget_considerations": []
-                    }
-
-                # Send final structured data
-                yield f"data: {json.dumps({'type': 'final', 'content': final_plan})}\n\n"
-
-                # Final complete message
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Research analysis completed successfully'})}\n\n"
-
+                # Send final status
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Research design complete'})}\n\n"
+                
+                # Send end message
+                yield "data: [DONE]\n\n"
+                
             except Exception as e:
-                logger.error(f"Error in generate: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+                logger.error(f"Error generating response: {str(e)}")
+                error_response = {"type": "error", "content": str(e)}
+                yield f"data: {json.dumps(error_response)}\n\n"
+                yield "data: [DONE]\n\n"
 
         return Response(
             stream_with_context(generate()),
@@ -236,12 +152,8 @@ def chat():
         )
 
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}")
-        return jsonify({
-            'error': str(e),
-            'type': 'error',
-            'status': 'error'
-        }), 500
+        logger.error(f"Error in chat route: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @multi_agent_bp.route('/analyze', methods=['POST'])
 @cross_origin(

@@ -109,6 +109,11 @@ const navigation: NavSection[] = [
                 name: 'Research Assistant',
                 path: '/multi-agent',
                 icon: PresentationChartLineIcon
+            },
+            {
+                name: 'Consultant',
+                path: '/consultant',
+                icon: UserGroupIcon
             }
         ]
     },

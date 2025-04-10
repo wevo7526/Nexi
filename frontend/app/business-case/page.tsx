@@ -1,54 +1,61 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Send, CheckCircle, AlertCircle, Search, ChevronRight } from "lucide-react";
+import { Loader2, Send, CheckCircle, AlertCircle, BookOpen, Users, ClipboardList, BarChart3, Clock, DollarSign, CheckCircle2, ChevronRight, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-interface Solution {
-    description: string;
-    pros: string[];
-    cons: string[];
-    implementation: string;
-    timeline: string;
+interface BusinessCaseSection {
+    title: string;
+    content: string | string[];
 }
 
-interface CaseAnalysis {
-    problemStatement: string;
-    keyFactors: string[];
-    constraints: string[];
-    solutions: Solution[];
-    recommendation: {
-        solution: string;
-        implementation: string;
-        timeline: string;
-        successMetrics: string[];
+interface BusinessCaseResponse {
+    content: {
+        sections: BusinessCaseSection[];
     };
-}
-
-interface StreamResponse {
-    type: 'stream' | 'complete' | 'error';
-    content: any;
+    outputs: Array<{
+        type: string;
+        title: string;
+        content: Record<string, any>;
+    }>;
 }
 
 interface ContentItem {
-    type: 'status' | 'analysis';
+    type: string;
+    title?: string;
+    content?: string;
+    section?: string;
+}
+
+interface ContentSectionProps {
+    title: string;
     content: string;
 }
 
-interface InteractiveCaseAnalysisProps {
-    analysis: CaseAnalysis;
-    activeTab: string;
+function formatContent(content: any): string {
+    if (Array.isArray(content)) {
+        return content.map(item => `• ${item}`).join('\n');
+    }
+    if (typeof content === 'object') {
+        return Object.entries(content)
+            .map(([key, value]) => {
+                const formattedKey = key.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+                return `### ${formattedKey}\n${formatContent(value)}`;
+            })
+            .join('\n\n');
+    }
+    return String(content);
 }
 
 function SectionHeader({ icon: Icon, title }: { icon: any; title: string }) {
@@ -59,6 +66,41 @@ function SectionHeader({ icon: Icon, title }: { icon: any; title: string }) {
             </div>
             <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
         </div>
+    );
+}
+
+function TimelineItem({ title, content }: { title: string; content: string }) {
+    return (
+        <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex gap-4 mb-4"
+        >
+            <div className="flex flex-col items-center">
+                <div className="w-2.5 h-2.5 bg-primary rounded-full ring-2 ring-primary/20" />
+                <div className="w-px h-full bg-gradient-to-b from-primary/20 to-transparent" />
+            </div>
+            <div className="flex-1 pb-4">
+                <h3 className="font-medium text-gray-800 mb-1.5">{title}</h3>
+                <p className="text-gray-600 leading-relaxed">{content}</p>
+            </div>
+        </motion.div>
+    );
+}
+
+function BudgetItem({ title, amount, description }: { title: string; amount: string; description?: string }) {
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl mb-2 border border-gray-100 hover:border-primary/20 transition-colors"
+        >
+            <div>
+                <h3 className="font-medium text-gray-800">{title}</h3>
+                {description && <p className="text-sm text-gray-600 mt-1">{description}</p>}
+            </div>
+            <span className="font-semibold text-primary bg-primary/10 px-3 py-1 rounded-lg">{amount}</span>
+        </motion.div>
     );
 }
 
@@ -77,304 +119,206 @@ function ContentCard({ children, className }: { children: React.ReactNode; class
     );
 }
 
-function InteractiveCaseAnalysis({ analysis, activeTab }: InteractiveCaseAnalysisProps) {
-    const [selectedSolution, setSelectedSolution] = useState<number | null>(null);
-    const [activeSection, setActiveSection] = useState('problem');
-
+function ContentSection({ 
+    title, 
+    content, 
+    icon: Icon = CheckCircle2,
+    type = 'default'
+}: { 
+    title: string; 
+    content: any; 
+    icon?: any;
+    type?: 'timeline' | 'budget' | 'list' | 'default';
+}) {
     return (
-        <div className="space-y-8">
-            {/* Navigation Tabs */}
-            <div className="flex space-x-4 overflow-x-auto pb-2">
-                {['problem', 'factors', 'solutions', 'constraints', 'recommendation'].map((section) => (
-                    <button
-                        key={section}
-                        onClick={() => setActiveSection(section)}
-                        className={cn(
-                            "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
-                            activeSection === section
-                                ? "bg-primary text-white"
-                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        )}
-                    >
-                        {section.charAt(0).toUpperCase() + section.slice(1)}
-                    </button>
-                ))}
-            </div>
-
-            {/* Problem Statement */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
-                    activeSection !== 'problem' && "hidden"
-                )}
-            >
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                        <Search className="w-5 h-5 text-primary" />
-                    </div>
-                    <h2 className="text-lg font-semibold">Problem Statement</h2>
+        <ContentCard>
+            <SectionHeader icon={Icon} title={title} />
+            {type === 'timeline' && Array.isArray(content) ? (
+                <div className="space-y-2">
+                    {content.map((item, index) => (
+                        <TimelineItem 
+                            key={index}
+                            title={item.split(':')[0]}
+                            content={item.split(':')[1]}
+                        />
+                    ))}
                 </div>
+            ) : type === 'budget' && Array.isArray(content) ? (
+                <div className="space-y-2">
+                    {content.map((item, index) => {
+                        const [title, amount] = item.split(':');
+                        return (
+                            <BudgetItem 
+                                key={index}
+                                title={title}
+                                amount={amount}
+                            />
+                        );
+                    })}
+                </div>
+            ) : Array.isArray(content) ? (
+                <ul className="space-y-3">
+                    {content.map((item, index) => (
+                        <motion.li 
+                            key={index} 
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            className="flex items-start gap-2 group"
+                        >
+                            <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                            <span className="text-gray-700 leading-relaxed">{item}</span>
+                        </motion.li>
+                    ))}
+                </ul>
+            ) : (
                 <div className="prose prose-sm max-w-none">
-                    <p className="text-gray-600 leading-relaxed">{analysis.problemStatement}</p>
-                </div>
-            </motion.div>
-
-            {/* Key Factors */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
-                    activeSection !== 'factors' && "hidden"
-                )}
-            >
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                        <CheckCircle className="w-5 h-5 text-primary" />
-                    </div>
-                    <h2 className="text-lg font-semibold">Key Factors</h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {analysis.keyFactors.map((factor, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: index * 0.1 }}
-                            className="group flex items-start gap-3 p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-primary/50 hover:bg-gray-100 transition-all"
-                        >
-                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <span className="text-sm font-medium text-primary">{index + 1}</span>
-                            </div>
-                            <span className="text-gray-600 text-sm">{factor}</span>
-                        </motion.div>
-                    ))}
-                </div>
-            </motion.div>
-
-            {/* Solutions */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
-                    activeSection !== 'solutions' && "hidden"
-                )}
-            >
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                        <CheckCircle className="w-5 h-5 text-primary" />
-                    </div>
-                    <h2 className="text-lg font-semibold">Proposed Solutions</h2>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {analysis.solutions.map((solution, idx) => (
-                        <motion.div
-                            key={idx}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: idx * 0.1 }}
-                            className={cn(
-                                "group relative rounded-lg border transition-all duration-200",
-                                selectedSolution === idx
-                                    ? "border-primary bg-primary/5 shadow-md"
-                                    : "border-gray-200 hover:border-primary/50 hover:bg-gray-50 hover:shadow-sm"
-                            )}
-                        >
-                            <div className="p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className={cn(
-                                            "w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium transition-colors",
-                                            selectedSolution === idx
-                                                ? "bg-primary text-white"
-                                                : "bg-gray-100 text-gray-600 group-hover:bg-primary/10"
-                                        )}>
-                                            {idx + 1}
-                                        </div>
-                                        <h3 className="font-medium text-gray-900">Solution {idx + 1}</h3>
-                                    </div>
-                                    <button
-                                        onClick={() => setSelectedSolution(selectedSolution === idx ? null : idx)}
-                                        className="text-sm text-primary hover:text-primary/80 flex items-center gap-1"
-                                    >
-                                        {selectedSolution === idx ? 'Hide Details' : 'Show Details'}
-                                        <ChevronRight className={cn(
-                                            "w-4 h-4 transition-transform",
-                                            selectedSolution === idx && "rotate-90"
-                                        )} />
-                                    </button>
-                                </div>
-                                
-                                <div className="space-y-3">
-                                    <p className="text-sm text-gray-600 line-clamp-2">{solution.description}</p>
-                                    
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 text-center p-2 bg-green-50 rounded-md">
-                                            <div className="text-sm font-medium text-green-600">{solution.pros.length}</div>
-                                            <div className="text-xs text-green-500">Pros</div>
-                                        </div>
-                                        <div className="flex-1 text-center p-2 bg-red-50 rounded-md">
-                                            <div className="text-sm font-medium text-red-600">{solution.cons.length}</div>
-                                            <div className="text-xs text-red-500">Cons</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <AnimatePresence>
-                                {selectedSolution === idx && (
-                                    <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        className="border-t border-gray-100"
-                                    >
-                                        <div className="p-4 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="bg-green-50 rounded-lg p-3 border border-green-100">
-                                                    <h4 className="text-sm font-medium text-green-600 mb-2">Pros</h4>
-                                                    <ul className="space-y-1.5">
-                                                        {solution.pros.map((pro, idx) => (
-                                                            <li key={idx} className="flex items-start gap-2 text-sm">
-                                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div>
-                                                                <span className="text-gray-600">{pro}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                                <div className="bg-red-50 rounded-lg p-3 border border-red-100">
-                                                    <h4 className="text-sm font-medium text-red-600 mb-2">Cons</h4>
-                                                    <ul className="space-y-1.5">
-                                                        {solution.cons.map((con, idx) => (
-                                                            <li key={idx} className="flex items-start gap-2 text-sm">
-                                                                <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5"></div>
-                                                                <span className="text-gray-600">{con}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="bg-gray-50 rounded-lg p-3">
-                                                    <h4 className="text-sm font-medium text-gray-700 mb-1">Implementation</h4>
-                                                    <p className="text-sm text-gray-600">{solution.implementation}</p>
-                                                </div>
-                                                <div className="bg-gray-50 rounded-lg p-3">
-                                                    <h4 className="text-sm font-medium text-gray-700 mb-1">Timeline</h4>
-                                                    <p className="text-sm text-gray-600">{solution.timeline}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </motion.div>
-                    ))}
-                </div>
-            </motion.div>
-
-            {/* Constraints */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
-                    activeSection !== 'constraints' && "hidden"
-                )}
-            >
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-red-50 rounded-lg">
-                        <AlertCircle className="w-5 h-5 text-red-500" />
-                    </div>
-                    <h2 className="text-lg font-semibold">Constraints</h2>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {analysis.constraints.map((constraint, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: index * 0.1 }}
-                            className="group flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-100 hover:border-red-200 transition-colors"
-                        >
-                            <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                                <AlertCircle className="w-4 h-4 text-red-500" />
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-sm text-gray-600">{constraint}</p>
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
-            </motion.div>
-
-            {/* Recommendation */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                    "bg-white rounded-xl p-6 border border-gray-100 shadow-sm",
-                    activeSection !== 'recommendation' && "hidden"
-                )}
-            >
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                        <CheckCircle className="w-5 h-5 text-primary" />
-                    </div>
-                    <h2 className="text-lg font-semibold">Final Recommendation</h2>
-                </div>
-
-                <div className="space-y-6">
-                    <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
-                        <h3 className="text-sm font-medium text-primary mb-2">Recommended Solution</h3>
-                        <p className="text-gray-600">{analysis.recommendation.solution}</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <h3 className="text-sm font-medium text-gray-700 mb-2">Implementation Plan</h3>
-                            <p className="text-gray-600">{analysis.recommendation.implementation}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <h3 className="text-sm font-medium text-gray-700 mb-2">Timeline</h3>
-                            <p className="text-gray-600">{analysis.recommendation.timeline}</p>
-                        </div>
-                    </div>
-
-                    <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                        <h3 className="text-sm font-medium text-green-600 mb-2">Success Metrics</h3>
-                        <ul className="space-y-2">
-                            {analysis.recommendation.successMetrics.map((metric, index) => (
-                                <li key={index} className="flex items-start gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div>
-                                    <span className="text-sm text-gray-600">{metric}</span>
-                                </li>
-                            ))}
-                        </ul>
+                    <div className="whitespace-pre-wrap text-gray-700">
+                        {String(content)}
                     </div>
                 </div>
-            </motion.div>
-        </div>
+            )}
+        </ContentCard>
     );
 }
+
+const sectionIcons = {
+    problem_statement: AlertCircle,
+    key_factors: BookOpen,
+    constraints: ClipboardList,
+    solutions: CheckCircle,
+    implementation: Clock,
+    timeline: Clock,
+    budget: DollarSign,
+    success_metrics: BarChart3,
+    recommendation: CheckCircle2
+};
+
+export const ReportSection = ({ title, content }: ContentSectionProps) => (
+    <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-2xl font-bold mb-4">{title}</h2>
+        <div className="prose max-w-none">
+            {content}
+        </div>
+    </div>
+);
+
+export const ReportContent = ({ content }: { content: any }) => {
+    // Handle the case where content is a string
+    if (typeof content === 'string') {
+        return (
+            <div className="prose prose-sm max-w-none">
+                <div className="whitespace-pre-wrap text-gray-700">
+                    {content}
+                </div>
+            </div>
+        );
+    }
+
+    // Handle the case where content is an array
+    if (Array.isArray(content)) {
+        return (
+            <ul className="space-y-3">
+                {content.map((item, index) => (
+                    <motion.li 
+                        key={index}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="flex items-start gap-2 group"
+                    >
+                        <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        <span className="text-gray-700 leading-relaxed">{String(item)}</span>
+                    </motion.li>
+                ))}
+            </ul>
+        );
+    }
+
+    // Handle the case where content is an object with sections
+    if (content && typeof content === 'object' && 'sections' in content) {
+        return (
+            <div className="space-y-6">
+                {content.sections.map((section: any, index: number) => (
+                    <ContentCard key={index}>
+                        <SectionHeader 
+                            icon={sectionIcons[section.title?.toLowerCase().replace(/\s+/g, '_') as keyof typeof sectionIcons] || CheckCircle2} 
+                            title={section.title || 'Section'} 
+                        />
+                        {Array.isArray(section.content) ? (
+                            <ul className="space-y-3">
+                                {section.content.map((item: string, listIndex: number) => (
+                                    <motion.li 
+                                        key={listIndex}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: listIndex * 0.1 }}
+                                        className="flex items-start gap-2 group"
+                                    >
+                                        <ChevronRight className="w-4 h-4 text-primary mt-1 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+                                        <span className="text-gray-700 leading-relaxed">{item}</span>
+                                    </motion.li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <div className="prose prose-sm max-w-none">
+                                <div className="whitespace-pre-wrap text-gray-700">
+                                    {String(section.content)}
+                                </div>
+                            </div>
+                        )}
+                    </ContentCard>
+                ))}
+            </div>
+        );
+    }
+
+    // Handle the case where content is a plain object
+    if (content && typeof content === 'object') {
+        return (
+            <div className="space-y-4">
+                {Object.entries(content).map(([key, value], index) => (
+                    <div key={index} className="space-y-2">
+                        <h3 className="font-medium text-gray-800">
+                            {key.split('_').map(word => 
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            ).join(' ')}
+                        </h3>
+                        <div className="text-gray-600">
+                            {Array.isArray(value) ? (
+                                <ul className="list-disc list-inside space-y-1">
+                                    {value.map((item: string, listIndex: number) => (
+                                        <li key={listIndex}>{String(item)}</li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p>{String(value)}</p>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    // Fallback for any other type of content
+    return (
+        <div className="prose prose-sm max-w-none">
+            <div className="whitespace-pre-wrap text-gray-700">
+                {String(content)}
+            </div>
+        </div>
+    );
+};
 
 export default function BusinessCasePage() {
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [progress, setProgress] = useState(0);
+    const [businessCaseData, setBusinessCaseData] = useState<BusinessCaseResponse | null>(null);
     const [streamContent, setStreamContent] = useState<ContentItem[]>([]);
-    const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
-    const [activeTab, setActiveTab] = useState('problem');
-    const [selectedSolution, setSelectedSolution] = useState<number | null>(null);
+    const [progress, setProgress] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const router = useRouter();
-    const { user } = useAuth();
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -382,7 +326,7 @@ export default function BusinessCasePage() {
 
     useEffect(() => {
         scrollToBottom();
-    }, [streamContent, analysis]);
+    }, [streamContent, businessCaseData]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -392,30 +336,23 @@ export default function BusinessCasePage() {
         setError(null);
         setStreamContent([]);
         setProgress(0);
-        setAnalysis(null);
 
         try {
-            const response = await fetch(`${BACKEND_URL}/api/business-case/stream_case_solution`, {
+            const response = await fetch(`${BACKEND_URL}/api/business-case/chat`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 body: JSON.stringify({
-                    case_text: query,
-                    user_id: user?.id
+                    query,
                 })
             });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || 'Failed to start case analysis');
-            }
+            if (!response.ok) throw new Error('Failed to fetch response');
 
             const reader = response.body?.getReader();
-            if (!reader) {
-                throw new Error('Failed to initialize stream reader');
-            }
+            if (!reader) throw new Error('No reader available');
 
             const decoder = new TextDecoder();
             let buffer = '';
@@ -431,327 +368,178 @@ export default function BusinessCasePage() {
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         try {
-                            const data: StreamResponse = JSON.parse(line.slice(6));
-                            
-                            if (data.type === 'stream') {
-                                setStreamContent(prev => [
-                                    ...prev,
-                                    {
-                                        type: 'status',
-                                        content: data.content
-                                    }
-                                ]);
-                                setProgress(prev => Math.min(prev + 20, 90));
-                            } else if (data.type === 'complete') {
-                                if (data.content && data.content.analysis) {
-                                    setAnalysis(data.content.analysis);
-                                }
-                                setProgress(100);
-                                setStreamContent([]);
-                                setIsLoading(false);
-                            } else if (data.type === 'error') {
-                                setError(data.content);
-                                setIsLoading(false);
+                            const data = JSON.parse(line.slice(6));
+
+                            switch (data.type) {
+                                case 'status':
+                                    setStreamContent(prev => [
+                                        ...prev,
+                                        {
+                                            type: 'status',
+                                            content: data.content
+                                        }
+                                    ]);
+                                    setProgress(prev => Math.min(prev + 20, 100));
+                                    break;
+                                case 'content':
+                                    setStreamContent(prev => [
+                                        ...prev,
+                                        {
+                                            type: 'content',
+                                            title: data.section,
+                                            content: data.content
+                                        }
+                                    ]);
+                                    break;
+                                case 'final':
+                                    setBusinessCaseData(data.content);
+                                    setProgress(100);
+                                    break;
+                                case 'error':
+                                    setError(data.content);
+                                    break;
                             }
-                        } catch (err) {
-                            console.error('Error parsing SSE data:', err);
+                        } catch (e) {
+                            console.error('Failed to parse server response:', e);
                             setError('Failed to parse server response');
-                            setIsLoading(false);
                         }
                     }
                 }
             }
         } catch (err) {
-            console.error('Error in handleSubmit:', err);
-            setError(err instanceof Error ? err.message : 'Failed to process business case');
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="container mx-auto px-8 py-8 max-w-[1600px]">
-                {/* Header Section */}
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">
-                        Business Case Analysis
+        <div className="container mx-auto p-4 max-w-4xl">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+            >
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent mb-4">
+                        Business Case Solver
                     </h1>
-                    <div className="bg-white rounded-xl border border-gray-100 p-6">
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <div>
-                                <label htmlFor="query" className="block text-lg font-medium text-gray-900 mb-2">
-                                    What business case would you like to analyze?
-                                </label>
-                                <div className="relative">
-                                    <textarea
-                                        id="query"
+                    <Card className="border-gray-100 shadow-sm">
+                        <CardContent className="pt-6">
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input
                                         value={query}
                                         onChange={(e) => setQuery(e.target.value)}
-                                        placeholder="Describe your business case in detail..."
-                                        className="w-full min-h-[120px] p-6 rounded-lg border border-gray-200 focus:ring-2 focus:ring-primary/50 focus:border-primary/50 text-base resize-none"
+                                        placeholder="Describe your business case or problem..."
+                                        className="flex-1 border-gray-200 focus:border-primary/50 focus:ring-primary/50"
                                         disabled={isLoading}
                                     />
-                                    <div className="absolute bottom-6 right-6">
-                                        <Button 
-                                            type="submit" 
-                                            disabled={isLoading || !query.trim()}
-                                            className="inline-flex items-center px-6 py-3 rounded-lg text-base font-medium bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md"
-                                        >
-                                            {isLoading ? (
-                                                <>
-                                                    <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
-                                                    <span>Analyzing Case...</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Send className="w-5 h-5 mr-2" />
-                                                    <span>Analyze Case</span>
-                                                </>
-                                            )}
-                                        </Button>
-                                    </div>
+                                    <Button 
+                                        type="submit" 
+                                        disabled={isLoading}
+                                        className="bg-primary hover:bg-primary/90"
+                                    >
+                                        {isLoading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Send className="h-4 w-4" />
+                                        )}
+                                    </Button>
                                 </div>
-                            </div>
-                        </form>
-                    </div>
+                            </form>
+                        </CardContent>
+                    </Card>
                 </div>
+            </motion.div>
 
-                {/* Error Alert */}
-                <AnimatePresence>
-                    {error && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2 }}
-                            className="mb-6"
-                        >
-                            <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Loading State */}
-                {isLoading && (
+            <AnimatePresence>
+                {error && (
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="mb-6"
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
                     >
-                        <div className="bg-white rounded-xl border border-gray-100 p-6">
+                        <Alert variant="destructive" className="mb-6">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {isLoading && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                >
+                    <Card className="mb-6 border-gray-100 shadow-sm">
+                        <CardContent className="pt-6">
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm font-medium text-gray-700">Analysis Progress</span>
-                                    <span className="text-sm text-gray-500">{progress}%</span>
+                                    <span className="text-sm text-muted-foreground">{progress}%</span>
                                 </div>
-                                <Progress value={progress} className="h-1 bg-gray-100" />
-                                {streamContent.map((item, index) => (
-                                    item.type === 'status' && (
-                                        <div key={index} className="flex items-center gap-2 text-sm text-gray-500">
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            <span>{item.content}</span>
-                                        </div>
-                                    )
-                                ))}
+                                <Progress value={progress} className="h-2 bg-gray-100" />
+                                {streamContent.find(item => item.type === 'status')?.content && (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>{streamContent.find(item => item.type === 'status')?.content}</span>
+                                    </div>
+                                )}
                             </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+            )}
+
+            <ScrollArea className="h-[600px] rounded-xl border border-gray-100 p-4">
+                <div className="space-y-8">
+                    {businessCaseData?.content?.sections && (
+                        <div className="space-y-8">
+                            {businessCaseData.content.sections.map((section, index) => (
+                                <ContentSection
+                                    key={index}
+                                    title={section.title}
+                                    content={section.content}
+                                    icon={sectionIcons[section.title?.toLowerCase().replace(/\s+/g, '_') as keyof typeof sectionIcons] || CheckCircle2}
+                                />
+                            ))}
                         </div>
-                    </motion.div>
-                )}
+                    )}
 
-                {/* Main Content Area */}
-                {analysis && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-xl font-semibold">Case Analysis Results</h2>
-                            <Button onClick={() => setAnalysis(null)}>Analyze Another Case</Button>
+                    {businessCaseData?.outputs?.map((output, index) => (
+                        <div key={index} className="space-y-6">
+                            <h2 className="text-xl font-semibold text-primary">{output.title}</h2>
+                            <ReportContent content={output.content} />
                         </div>
-
-                        <div className="prose max-w-none">
-                            {/* Problem Statement */}
-                            <Card className="mb-6">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-3">
-                                        <div className="p-2 bg-primary/10 rounded-lg">
-                                            <Search className="w-5 h-5 text-primary" />
-                                        </div>
-                                        <span>Problem Statement</span>
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-gray-600 leading-relaxed">{analysis.problemStatement}</p>
-                                </CardContent>
-                            </Card>
-
-                            {/* Key Factors */}
-                            <Card className="mb-6">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-3">
-                                        <div className="p-2 bg-primary/10 rounded-lg">
-                                            <CheckCircle className="w-5 h-5 text-primary" />
-                                        </div>
-                                        <span>Key Factors</span>
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {analysis.keyFactors.map((factor, index) => (
-                                            <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2"></div>
-                                                <span className="text-gray-600 text-sm">{factor}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Solutions */}
-                            <Card className="mb-6">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-primary/10 rounded-lg">
-                                                <CheckCircle className="w-5 h-5 text-primary" />
-                                            </div>
-                                            <span>Proposed Solutions</span>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {analysis.solutions.map((_, idx) => (
-                                                <button
-                                                    key={idx}
-                                                    onClick={() => setSelectedSolution(idx)}
-                                                    className={cn(
-                                                        "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors",
-                                                        selectedSolution === idx
-                                                            ? "bg-primary text-white"
-                                                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                    )}
-                                                >
-                                                    {idx + 1}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {selectedSolution !== null && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="space-y-6"
-                                        >
-                                            <div className="p-4 bg-gray-50 rounded-lg">
-                                                <p className="text-gray-600">{analysis.solutions[selectedSolution].description}</p>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                                                    <h4 className="text-sm font-medium text-green-600 mb-3">Pros</h4>
-                                                    <ul className="space-y-2">
-                                                        {analysis.solutions[selectedSolution].pros.map((pro, idx) => (
-                                                            <li key={idx} className="flex items-start gap-2 text-sm">
-                                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div>
-                                                                <span className="text-gray-600">{pro}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                                <div className="bg-red-50 rounded-lg p-4 border border-red-100">
-                                                    <h4 className="text-sm font-medium text-red-600 mb-3">Cons</h4>
-                                                    <ul className="space-y-2">
-                                                        {analysis.solutions[selectedSolution].cons.map((con, idx) => (
-                                                            <li key={idx} className="flex items-start gap-2 text-sm">
-                                                                <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5"></div>
-                                                                <span className="text-gray-600">{con}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="bg-gray-50 rounded-lg p-4">
-                                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Implementation</h4>
-                                                    <p className="text-sm text-gray-600">{analysis.solutions[selectedSolution].implementation}</p>
-                                                </div>
-                                                <div className="bg-gray-50 rounded-lg p-4">
-                                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Timeline</h4>
-                                                    <p className="text-sm text-gray-600">{analysis.solutions[selectedSolution].timeline}</p>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </CardContent>
-                            </Card>
-
-                            {/* Constraints */}
-                            <Card className="mb-6">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-3">
-                                        <div className="p-2 bg-red-50 rounded-lg">
-                                            <AlertCircle className="w-5 h-5 text-red-500" />
-                                        </div>
-                                        <span>Constraints</span>
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {analysis.constraints.map((constraint, index) => (
-                                            <div key={index} className="flex items-start gap-2 p-3 bg-red-50 rounded-lg">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5"></div>
-                                                <span className="text-sm text-gray-600">{constraint}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Recommendation */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-3">
-                                        <div className="p-2 bg-primary/10 rounded-lg">
-                                            <CheckCircle className="w-5 h-5 text-primary" />
-                                        </div>
-                                        <span>Final Recommendation</span>
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-4">
-                                        <div className="p-4 bg-primary/5 rounded-lg">
-                                            <p className="text-gray-600">{analysis.recommendation.solution}</p>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="p-3 bg-gray-50 rounded-lg">
-                                                <h4 className="text-sm font-medium text-gray-700 mb-1">Implementation</h4>
-                                                <p className="text-sm text-gray-600">{analysis.recommendation.implementation}</p>
-                                            </div>
-                                            <div className="p-3 bg-gray-50 rounded-lg">
-                                                <h4 className="text-sm font-medium text-gray-700 mb-1">Timeline</h4>
-                                                <p className="text-sm text-gray-600">{analysis.recommendation.timeline}</p>
-                                            </div>
-                                        </div>
-                                        <div className="p-3 bg-gray-50 rounded-lg">
-                                            <h4 className="text-sm font-medium text-gray-700 mb-2">Success Metrics</h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                                                {analysis.recommendation.successMetrics.map((metric, index) => (
-                                                    <div key={index} className="flex items-center gap-2 text-sm">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                                                        <span className="text-gray-600">{metric}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                    ))}
+                    
+                    {streamContent.filter(item => item.type === 'content').map((item, index) => (
+                        <div key={index} className="space-y-4">
+                            <h2 className="text-xl font-semibold text-primary capitalize">
+                                {item.title?.replace('_', ' ')}
+                            </h2>
+                            <ReportContent 
+                                content={(() => {
+                                    try {
+                                        if (typeof item.content === 'string') {
+                                            return JSON.parse(item.content);
+                                        }
+                                        return item.content || [];
+                                    } catch (e) {
+                                        console.error('Error parsing content:', e);
+                                        return item.content || [];
+                                    }
+                                })()} 
+                            />
                         </div>
-                    </div>
-                )}
-            </div>
+                    ))}
+                </div>
+                <div ref={messagesEndRef} />
+            </ScrollArea>
         </div>
     );
 } 
