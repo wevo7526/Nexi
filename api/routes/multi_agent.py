@@ -128,25 +128,10 @@ def chat():
                         # Log the chunk type for debugging
                         logger.info(f"Processing chunk type: {chunk.get('type')}")
                         
-                        # Convert 'content' type to 'research' type for frontend compatibility
-                        if chunk.get('type') == 'content':
-                            chunk['type'] = 'research'
-                            
-                            # Ensure content is properly formatted as JSON string if it's not already
-                            if isinstance(chunk.get('content'), (dict, list)):
-                                chunk['content'] = json.dumps(chunk['content'])
-                                logger.info(f"Converted content to JSON string: {chunk['content'][:100]}...")
-                        
-                        # Ensure each chunk is properly formatted as SSE
+                        # Send the chunk directly - the model now returns properly formatted data
                         sse_data = f"data: {json.dumps(chunk)}\n\n"
                         logger.info(f"Sending SSE data: {sse_data[:100]}...")
                         yield sse_data
-                
-                # Send final status
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Research design complete'})}\n\n"
-                
-                # Send final content message
-                yield f"data: {json.dumps({'type': 'final', 'content': 'Research design process completed successfully'})}\n\n"
                 
                 # Send end message
                 logger.info("Sending [DONE] message")

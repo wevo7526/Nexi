@@ -267,4 +267,124 @@ def stream_case_solution():
         return jsonify({
             'error': str(e),
             'success': False
+        }), 500
+
+@business_case_bp.route('/chat', methods=['POST'])
+def chat():
+    """Handle chat-like interactions for business case analysis."""
+    try:
+        data = request.get_json()
+        query = data.get('query')
+        
+        if not query:
+            return jsonify({'error': 'No query provided'}), 400
+
+        def generate():
+            try:
+                # Initial status
+                yield format_sse({
+                    'type': 'status',
+                    'content': 'Starting business case analysis...'
+                })
+
+                # Problem identification
+                yield format_sse({
+                    'type': 'status',
+                    'content': 'Identifying core business problem...'
+                })
+                problem_statement = agent.identify_problem(query)
+                yield format_sse({
+                    'type': 'content',
+                    'section': 'problem_statement',
+                    'content': json.dumps(problem_statement)
+                })
+
+                # Key factors analysis
+                yield format_sse({
+                    'type': 'status',
+                    'content': 'Analyzing key factors...'
+                })
+                key_factors = agent.analyze_key_factors(query)
+                yield format_sse({
+                    'type': 'content',
+                    'section': 'key_factors',
+                    'content': json.dumps(key_factors)
+                })
+
+                # Constraints analysis
+                yield format_sse({
+                    'type': 'status',
+                    'content': 'Identifying constraints...'
+                })
+                constraints = agent.identify_constraints(query)
+                yield format_sse({
+                    'type': 'content',
+                    'section': 'constraints',
+                    'content': json.dumps(constraints)
+                })
+
+                # Solution generation
+                yield format_sse({
+                    'type': 'status',
+                    'content': 'Generating potential solutions...'
+                })
+                solutions = agent.generate_solutions(query)
+                yield format_sse({
+                    'type': 'content',
+                    'section': 'solutions',
+                    'content': json.dumps(solutions)
+                })
+
+                # Recommendation
+                yield format_sse({
+                    'type': 'status',
+                    'content': 'Formulating final recommendation...'
+                })
+                recommendation = agent.formulate_recommendation(solutions)
+                yield format_sse({
+                    'type': 'content',
+                    'section': 'recommendation',
+                    'content': json.dumps(recommendation)
+                })
+
+                # Final complete message
+                yield format_sse({
+                    'type': 'final',
+                    'content': {
+                        'content': {
+                            'sections': [
+                                {'title': 'Problem Statement', 'content': problem_statement},
+                                {'title': 'Key Factors', 'content': key_factors},
+                                {'title': 'Constraints', 'content': constraints},
+                                {'title': 'Solutions', 'content': solutions},
+                                {'title': 'Recommendation', 'content': recommendation}
+                            ]
+                        },
+                        'outputs': [
+                            {
+                                'type': 'summary',
+                                'title': 'Executive Summary',
+                                'content': {
+                                    'problem': problem_statement,
+                                    'key_factors': key_factors,
+                                    'recommendation': recommendation
+                                }
+                            }
+                        ]
+                    }
+                })
+
+            except Exception as e:
+                print(f"Error in chat stream: {str(e)}")
+                yield format_sse({
+                    'type': 'error',
+                    'content': str(e)
+                })
+
+        return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+    except Exception as e:
+        print(f"Error in chat endpoint: {str(e)}")
+        return jsonify({
+            'error': str(e)
         }), 500 

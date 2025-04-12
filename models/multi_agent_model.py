@@ -376,19 +376,20 @@ Remember to tailor your response to the specific research query provided. Focus 
                 
                 for section_name, section_content in sections:
                     if section_content:
-                        # Create section data without timestamps or word counts
+                        # Create section data with proper formatting for frontend
                         section_data = {
                             "title": section_name,
                             "content": section_content,
-                            "section_id": section_name.lower().replace(" ", "_")
+                            "type": "research"
                         }
                         
                         # Log the section data for debugging
                         logger.info(f"Extracted section: {section_name}")
                         logger.info(f"Section content length: {len(section_content)}")
                         
+                        # Yield the section with proper formatting for frontend
                         yield {
-                            "type": "content",
+                            "type": "research",
                             "section": section_name.lower().replace(" ", "_"),
                             "content": json.dumps(section_data)
                         }
