@@ -1,6 +1,14 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 interface ProjectTeamMember {
     user: {
@@ -36,26 +44,9 @@ export async function GET(
     { params }: { params: { id: string } }
 ) {
     try {
-        const cookieStore = cookies();
-        const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-
         const { data: project, error } = await supabase
             .from('projects')
-            .select(`
-                *,
-                project_team_members!inner (
-                    user:user_id (
-                        full_name
-                    )
-                ),
-                tasks (
-                    id,
-                    status
-                ),
-                documents (
-                    id
-                )
-            `)
+            .select('*')
             .eq('id', params.id)
             .single();
 
@@ -94,12 +85,9 @@ export async function PUT(
     { params }: { params: { id: string } }
 ) {
     try {
-        const cookieStore = cookies();
-        const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
         const body = await request.json();
 
-        // Update project
-        const { data: project, error: projectError } = await supabase
+        const { data: project, error } = await supabase
             .from('projects')
             .update({
                 name: body.name,
@@ -107,40 +95,13 @@ export async function PUT(
                 client_id: body.clientId,
                 start_date: body.startDate,
                 end_date: body.endDate,
-                status: body.status,
-                progress: body.progress
+                status: body.status
             })
             .eq('id', params.id)
             .select()
             .single();
 
-        if (projectError) throw projectError;
-
-        // Update team members if provided
-        if (body.teamMembers) {
-            // First, delete existing team members
-            const { error: deleteError } = await supabase
-                .from('project_team_members')
-                .delete()
-                .eq('project_id', params.id);
-
-            if (deleteError) throw deleteError;
-
-            // Then, insert new team members
-            if (body.teamMembers.length > 0) {
-                const { error: teamError } = await supabase
-                    .from('project_team_members')
-                    .insert(
-                        body.teamMembers.map((memberId: string) => ({
-                            project_id: params.id,
-                            user_id: memberId,
-                            role: 'member'
-                        }))
-                    );
-
-                if (teamError) throw teamError;
-            }
-        }
+        if (error) throw error;
 
         return NextResponse.json(project);
     } catch (error) {
@@ -157,9 +118,6 @@ export async function DELETE(
     { params }: { params: { id: string } }
 ) {
     try {
-        const cookieStore = cookies();
-        const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-
         const { error } = await supabase
             .from('projects')
             .delete()
