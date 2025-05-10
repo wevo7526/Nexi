@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('Missing Supabase environment variables');
@@ -38,9 +38,12 @@ export async function POST(request: Request) {
             .insert([
                 {
                     name: body.name,
-                    email: body.email,
-                    phone: body.phone,
-                    address: body.address
+                    description: body.description,
+                    industry: body.industry,
+                    website: body.website,
+                    contact_email: body.contactEmail,
+                    contact_phone: body.contactPhone,
+                    created_by: body.userId
                 }
             ])
             .select()
